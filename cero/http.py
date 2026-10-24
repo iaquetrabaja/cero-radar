@@ -21,7 +21,7 @@ def _pause(url):
 
 
 def _blocked(status,text):
-    return status in (403,429,503) or any(s in text[:1200].lower() for s in ('just a moment','cf-browser-verification','robot check','verify you are human'))
+    return status in (403,429,503) or any(s in text[:12000].lower() for s in ('just a moment','cf-browser-verification','robot check','verify you are human','triggerinterstitialchallenge','/errors/validatecaptcha'))
 
 
 def get(url,headers=None,timeout=15):

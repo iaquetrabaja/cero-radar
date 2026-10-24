@@ -87,12 +87,23 @@ def priority_items(conn):
     return list({r['id']:unpack(r) for r in [*hot,*tracked,*pending]}.values())
 
 
+def _amazon_pass(conn,profile):
+    from cero.amazon import collect
+    items,read=collect(profile,_log)
+    if items:_verify(conn,items,'amazon')
+    set_setting(conn,'last_amazon',now());conn.commit()
+
+
 def _run(profile,url):
     c=connect();run_id=None;outcome='completed'
     try:
         cur=c.execute('INSERT INTO runs(profile,started_at,status) VALUES(?,?,?)',(profile,now(),'running'))
         run_id=cur.lastrowid;c.commit()
         with _lock:STATE['run_id']=run_id
+        if profile=='amazon':
+            _amazon_pass(c,profile)
+            _log(f'Amazon: {STATE["checked"]} fichas revisadas, {STATE["found"]} ofertas verificadas.')
+            return
         existing=priority_items(c)
         watches=[dict(r) for r in c.execute('SELECT * FROM watches')]
         due_restocks=[unpack(r) for r in c.execute('SELECT d.* FROM deals d JOIN restocks r ON r.deal_id=d.id WHERE r.active=1 AND r.next_check<=?',(now(),))]
@@ -102,9 +113,7 @@ def _run(profile,url):
         _verify(c,items,'checking')
         if not _stop.is_set() and profile!='single':set_setting(c,'last_watch',now());c.commit()
         if not _stop.is_set() and profile not in ('watch','single'):
-            from cero.amazon import collect as amazon_collect
-            amazon_candidates,amazon_read=amazon_collect(profile,_log)
-            if amazon_candidates:_verify(c,amazon_candidates[:50],'amazon')
+            _amazon_pass(c,profile)
             from cero.adapters import deporvillage
             from cero.hunter import health
             import time
@@ -166,7 +175,7 @@ def _run(profile,url):
         with _lock:STATE.update(running=False,phase='idle')
 
 
-DEFAULTS={'enabled':True,'continuous':True,'cycle_pause_seconds':60,'watch_minutes':15,'discovery_minutes':60,'deep_hours':24}
+DEFAULTS={'enabled':True,'continuous':True,'cycle_pause_seconds':60,'watch_minutes':15,'amazon_minutes':10,'discovery_minutes':60,'deep_hours':24}
 
 
 def schedule_config(conn):return {**DEFAULTS,**setting(conn,'schedule',{})}
@@ -184,6 +193,7 @@ def scheduler_loop():
                 if not last:return True
                 return (datetime.now(timezone.utc)-datetime.fromisoformat(last)).total_seconds()>=seconds
             if due('watch',cfg['watch_minutes']*60):start('watch')
+            elif due('amazon',cfg['amazon_minutes']*60):start('amazon')
             elif due('deep',cfg['deep_hours']*3600):start('deep')
             elif cfg['continuous'] and due('normal',cfg['cycle_pause_seconds']):start('normal')
             elif due('normal',cfg['discovery_minutes']*60):start('normal')

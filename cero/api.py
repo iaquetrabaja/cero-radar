@@ -45,6 +45,7 @@ class ScheduleIn(BaseModel):
     continuous:bool=True
     cycle_pause_seconds:int=Field(default=60,ge=30,le=3600)
     watch_minutes:int=Field(default=15,ge=5,le=1440)
+    amazon_minutes:int=Field(default=10,ge=5,le=1440)
     discovery_minutes:int=Field(default=60,ge=15,le=1440)
     deep_hours:int=Field(default=24,ge=6,le=168)
 
@@ -70,7 +71,7 @@ def status_view():return status()
 
 @app.post('/api/scan')
 def scan(body:ScanIn):
-    if body.profile not in ('normal','deep','watch'):raise HTTPException(422,'Perfil no válido')
+    if body.profile not in ('normal','deep','watch','amazon'):raise HTTPException(422,'Perfil no válido')
     return {'started':start(body.profile),'profile':body.profile}
 
 @app.post('/api/stop')

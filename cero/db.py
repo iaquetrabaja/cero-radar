@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from cero.config import BUDGET_TIMEZONE
 from cero.market import COUNTRY,CURRENCY,PROFILE
 from cero.config import DB_PATH, GEMINI_BUDGET_EUR
-from cero.policy import canonical, known_store, allowed,affiliate_url
+from cero.policy import canonical, known_store, allowed,affiliate_url,host_of
 
 
 def now():
@@ -38,7 +38,7 @@ EXTRA={'status':"TEXT DEFAULT 'unverified'",'availability':"TEXT DEFAULT 'unknow
  'confidence':'REAL DEFAULT 0','known_store':'INTEGER DEFAULT 0','favorite':'INTEGER DEFAULT 0','evidence':"TEXT DEFAULT '[]'",
  'verification_level':"TEXT DEFAULT 'page'",'delivery_status':"TEXT DEFAULT 'unknown'",'next_review':'TEXT',
  'image_status':"TEXT DEFAULT 'pending'",'image_source':"TEXT DEFAULT ''",'gtin':"TEXT DEFAULT ''",'sku':"TEXT DEFAULT ''",'page_status':"TEXT DEFAULT 'unknown'",'subcategory':"TEXT DEFAULT ''",
- 'last_verified_at':'TEXT','best_price':'REAL','best_discount':'REAL','ai_score':'REAL','ai_reason':'TEXT'}
+ 'last_verified_at':'TEXT','best_price':'REAL','best_discount':'REAL','ai_score':'REAL','ai_reason':'TEXT','shipping_note':"TEXT DEFAULT ''"}
 _migrated=set()
 
 
@@ -76,6 +76,9 @@ def deal_id(deal):
 def upsert(conn,deal):
     url=canonical(deal.get('url',''));variant=deal.get('variant') or ''
     old=conn.execute("SELECT * FROM deals WHERE url=? AND COALESCE(variant,'')=?",(url,variant)).fetchone()
+    # Un ASIN de ficha ya identifica la variante. Completar su talla no crea otra oferta.
+    if not old and host_of(url)==PROFILE.get('amazon_domain'):
+        old=conn.execute('SELECT * FROM deals WHERE url=? ORDER BY found_at LIMIT 1',(url,)).fetchone()
     if not old:
         old=next((r for r in conn.execute("SELECT * FROM deals WHERE status='unverified'")
                   if canonical(r['url'] or '')==url and (r['variant'] or '')==variant),None)
@@ -162,7 +165,7 @@ def query_deals(conn,**f):
     for key in ('country','category','subcategory','product_type','status','score_source'):
         if f.get(key) and f[key]!='all':
             if key=='status' and f[key]=='radar':
-                clauses.append("(status='verified' OR (last_verified_at IS NOT NULL AND status IN ('stale','blocked','unverified','expired')) OR (price=0 AND availability='out_of_stock' AND page_status='ok' AND status='expired'))")
+                clauses.append("(status='verified' OR (last_verified_at IS NOT NULL AND status IN ('stale','blocked','unverified','expired','conditional','candidate')) OR (price=0 AND availability='out_of_stock' AND page_status='ok' AND status='expired'))")
             elif key=='status' and f[key]=='stale':
                 clauses.append("(status='stale' OR (status='verified' AND checked_at < ?))");params.append(cutoff())
             else:

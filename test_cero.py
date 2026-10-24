@@ -50,6 +50,12 @@ class ExtractionTests(unittest.TestCase):
         html=page(price=0,extra='<div id="tab-description">form.cart{display:none !important;}</div>')
         d=parse_product(URL,html)[0]
         self.assertEqual(d['status'],'candidate');self.assertNotIn('_cart_eligible',d)
+    def test_sample_cannot_be_promoted_by_cart(self):
+        d=parse_product(URL,page(price=0).replace('Robot aspirador de prueba','Muestra de crema'))[0]
+        self.assertEqual(d['status'],'rejected');self.assertNotIn('_cart_eligible',d)
+    def test_return_service_is_not_a_free_product(self):
+        d=parse_product(URL,page(price=0).replace('Robot aspirador de prueba','Cambio de caja retornable (recoger la anterior)'))[0]
+        self.assertEqual(d['status'],'rejected');self.assertNotIn('_cart_eligible',d)
     def test_out_of_stock_retained(self):
         d=parse_product(URL,page(price=0,availability='OutOfStock'))[0]
         self.assertEqual(d['status'],'expired');self.assertEqual(d['price'],0)
@@ -67,9 +73,41 @@ class ExtractionTests(unittest.TestCase):
         h='''<html><span id="productTitle">Auriculares de prueba</span><div id="corePrice_feature_div"><span class="a-price"><span class="a-offscreen">10,70 EUR</span></span></div><div id="corePriceDisplay_desktop_feature_div"><span id="apex-pricetopay-accessibility-label">10,70 EUR con ahorro del 84%</span><span class="a-price"><span class="a-offscreen"></span></span><span class="a-text-price"><span class="a-offscreen">64,90 EUR</span></span></div><input id="add-to-cart-button"><div id="availability">En stock</div></html>'''
         d=parse_product('https://www.amazon.es/dp/B08VS28Y7F',h)[0]
         self.assertEqual((d['price'],d['reference_price'],d['status']),(10.7,64.9,'verified'))
+    def test_amazon_inline_twister_selected_size(self):
+        h='''<span id="productTitle">Vaqueros</span><div id="corePrice_feature_div"><span class="a-price"><span class="a-offscreen">23,33 EUR</span></span><span class="a-text-price"><span class="a-offscreen">149,90 EUR</span></span></div><input id="add-to-cart-button"><div id="inline-twister-expander-content-size_name"><li data-initiallyselected="false"><span class="swatch-title-text">25W / 28L</span></li><li data-initiallyselected="true"><span class="swatch-title-text">26W / 28L</span></li></div>'''
+        d=parse_product('https://www.amazon.es/dp/B0F4QL2DJS',h)[0]
+        self.assertEqual(d['variant'],'Talla 26W / 28L');self.assertEqual(d['discount_pct'],84.4)
     def test_listing_does_not_invent_product_at_page_url(self):
         html='<html><h1>Ofertas de la tienda</h1><button>Añadir al carrito</button>0,00 EUR 900,00 EUR</html>'
         self.assertEqual(extract_listing(html,'https://tienda.es/','Tienda',''),[])
+
+
+class AmazonDiscoveryTests(unittest.TestCase):
+    def test_access_challenge_is_not_empty_search(self):
+        from cero.http import _blocked
+        self.assertTrue(_blocked(200,'<html><script>function triggerInterstitialChallenge(){}</script></html>'))
+    def test_listing_filter_never_invents_reference(self):
+        from cero.amazon import parse_results
+        h='''<div data-component-type="s-search-result" data-asin="B0F4QL2DJS"><h2>Vaqueros de prueba</h2><span class="a-price"><span class="a-offscreen">23,33 EUR</span></span><span>90% algodón</span></div>'''
+        d=parse_results(h,'80%+')[0]
+        self.assertIsNone(d['reference_price']);self.assertIsNone(d['discount_pct']);self.assertEqual(d['_amazon_badge'],0)
+    def test_reference_label_and_discount_badge(self):
+        from cero.amazon import parse_results
+        h='''<div data-component-type="s-search-result" data-asin="B0F4QL2DJS"><h2>Vaqueros de prueba</h2><span class="a-price"><span class="a-offscreen">23,33 EUR</span></span><span>Recomendado: 149,90 €</span><span>Ahorra 84%</span></div>'''
+        d=parse_results(h,'prueba')[0]
+        self.assertEqual(d['reference_price'],149.9);self.assertEqual(d['discount_pct'],84.4);self.assertEqual(d['_amazon_badge'],84)
+    def test_rotation_reaches_second_page_and_ninety_percent(self):
+        from cero.amazon import search_jobs
+        from urllib.parse import urlparse,parse_qs
+        state={};visits={}
+        for _ in range(36):
+            jobs,state=search_jobs(state)
+            for name,url in jobs:
+                q=parse_qs(urlparse(url).query)
+                key=q.get('k',q.get('i'))[0];visits.setdefault(key,[]).append(q)
+        rows=visits['Tommy Hilfiger']
+        self.assertEqual([q['page'][0] for q in rows[:5]],['1','2','3','4','1'])
+        self.assertEqual(rows[4]['rh'],['p_8:90-'])
 
 
 class PolicyTests(unittest.TestCase):
@@ -133,6 +171,23 @@ class PersistenceTests(unittest.TestCase):
         self.put();self.put(price=5)
         self.assertEqual(self.c.execute('SELECT COUNT(*) FROM deals').fetchone()[0],1)
         self.assertEqual(self.c.execute('SELECT COUNT(*) FROM observations').fetchone()[0],2)
+    def test_completing_amazon_size_keeps_same_asin(self):
+        self.put(url='https://www.amazon.es/dp/B0F4QL2DJS',variant='')
+        self.put(url='https://www.amazon.es/dp/B0F4QL2DJS',variant='Talla 26W / 28L')
+        self.assertEqual(self.c.execute('SELECT COUNT(*) FROM deals').fetchone()[0],1)
+        self.assertEqual(self.c.execute('SELECT variant FROM deals').fetchone()[0],'Talla 26W / 28L')
+    def test_amazon_explores_missing_list_reference_without_inventing_it(self):
+        from cero.amazon import collect
+        h='''<div data-component-type="s-search-result" data-asin="B0F4QL2DJS"><h2>Vaqueros de prueba</h2><span class="a-price"><span class="a-offscreen">23,33 EUR</span></span></div>'''
+        with patch('cero.amazon.http.get',return_value=(200,h,'https://www.amazon.es/s')),patch('cero.amazon.health'):
+            rows,read=collect()
+        self.assertEqual(read,1);self.assertEqual(len(rows),1)
+        self.assertIsNone(rows[0]['reference_price']);self.assertIsNone(rows[0]['discount_pct'])
+    def test_previously_verified_zero_survives_new_uncertainty(self):
+        self.put(status='verified',availability='in_stock')
+        self.put(status='conditional',availability='in_stock')
+        self.assertEqual(len(db.query_deals(self.c,status='radar')),1)
+        self.assertEqual(db.query_deals(self.c,status='verified'),[])
     def test_eighty_percent_floor(self):
         self.put(price=25,reference_price=100,discount_pct=75,status='verified')
         self.assertEqual(db.query_deals(self.c,status='verified'),[])

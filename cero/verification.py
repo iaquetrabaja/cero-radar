@@ -139,7 +139,7 @@ def parse_product(url,html):
     purchasable=button is not None and not button.has_attr('disabled') and button.get('aria-disabled')!='true' and 'disabled' not in (button.get('class') or [])
     styles=' '.join(s.get_text() for s in soup.select('style'))
     # Algunos regalos internos publican price=0 pero ocultan expresamente la compra.
-    description=soup.select_one('#tab-description,.woocommerce-product-details__short-description,[itemprop="description"]')
+    description=soup.select_one('#tab-description,.woocommerce-product-details__short-description,.product__description,.product-description,.product-single__description,[itemprop="description"]')
     desc=description.get_text(' ',strip=True) if description else ''
     hidden=bool(re.search(r'(?:form\.cart|\.single_add_to_cart_button)[^{]*\{[^}]*display\s*:\s*none',styles+' '+desc,re.I))
     conditional=bool(re.search(r'gratis (?:al|por|con) comprar|regalo (?:por|con) (?:la |tu )?compra|pedido m[ií]nimo|solicitar presupuesto|pide presupuesto|solo presupuesto|precio a consultar',desc,re.I))
@@ -184,8 +184,9 @@ def parse_product(url,html):
         d['discount_pct']=100 if d['price']==0 else discount_pct(d['price'],d['reference_price'])
         d['confidence']=90 if d['status']=='verified' else 35
         if d['is_sample'] or is_digital(d['title'],url):d['status']='rejected'
-        if re.search(r'^(?:gastos de env[ií]o|env[ií]o en caja|presupuesto|muestras?\b|visita\b|entrada\b|donaci[oó]n|tarjeta regalo)',d['title'],re.I):
+        if re.search(r'^(?:gastos de env[ií]o|env[ií]o en caja|presupuesto|solicita presupuesto|muestras?\b|visita\b|entrada\b|donaci[oó]n|tarjeta regalo|cambio de caja|recogida\b|devoluci[oó]n\b)|recoger la anterior',d['title'],re.I):
             d['status']='rejected';d['conditions']='Servicio, muestra o artículo simbólico; no es un producto físico completo.'
+        if d['status']=='rejected':d.pop('_cart_eligible',None)
     seen=set();out=[]
     for d in records:
         k=(d['url'],d['variant'],d['price'])
@@ -246,8 +247,10 @@ def _amazon(url,soup):
         ref=parse_amount(old.get_text(' ',strip=True))
         if ref and ref>price:d['reference_price']=ref;d['reference_source']='Precio de referencia de Amazon'
     size=soup.select_one('#variation_size_name .selection,#variation_size_name .a-dropdown-prompt')
+    if size is None:size=soup.select_one('#inline-twister-expander-content-size_name [data-initiallyselected="true"] .swatch-title-text')
     if size:d['variant']='Talla '+size.get_text(' ',strip=True)
     color=soup.select_one('#variation_color_name .selection')
+    if color is None:color=soup.select_one('#inline-twister-expander-content-color_name [data-initiallyselected="true"] .swatch-title-text')
     if color:d['variant']+=' · '+color.get_text(' ',strip=True)
     image=soup.select_one('#landingImage,#imgBlkFront')
     if image:d['image']=image.get('data-old-hires') or image.get('src','')

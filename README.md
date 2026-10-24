@@ -80,6 +80,8 @@ Necesita ordenador encendido, conectado y sin suspensión. Para funcionar con el
 
 Configura **tu propio ID** en `AMAZON_ASSOCIATE_TAG`. Los enlaces de salida lo incluyen; las URLs internas se guardan limpias para deduplicar. La interfaz identifica la afiliación. El parámetro de descuento de Amazon sirve para descubrir, nunca para probar una rebaja.
 
+El adaptador alterna búsquedas por producto, 32 marcas y 12 departamentos. Rota las páginas 1–4 y umbrales del 80% y 90%, incluyendo el 100%. Cada pasada normal hace 12 búsquedas (36 en una profunda) y abre también una selección de fichas cuyo listado oculta el precio de referencia. Los ASIN nuevos tienen prioridad y se comprueba el precio de la talla o color seleccionados en la ficha. Hay una revisión específica de Amazon cada 10 minutos, cuando el motor queda libre; se configura en el panel. Los precios y referencias anunciados no acreditan por sí solos el ahorro frente al mercado.
+
 ## Telegram preparado y desactivado
 
 Sin opciones en el panel y sin envíos automáticos. Bandeja local y transporte con foto, precio, gastos y enlace. Inspección sin enviar:
@@ -103,7 +105,7 @@ Los adaptadores nuevos devuelven candidatos que pasan por `hunter.check_url`, `v
 
 ## Casos observados
 
-El 24 de octubre de 2026 mantuvieron precio cero, por separado y en cesta anónima, una **turmalina en Lozano Gemólogos** y una **bolsa física Dr.Grandel en être belle**. La primera cesta mostraba 6,05 € de gastos sin seleccionar destino. Son observaciones fechadas, no ofertas permanentes ni pedidos entregados. Se descartaron falsos positivos: una variante Origins no comprable y compra oculta en Cuatro Rayas.
+El 24 de octubre de 2026 mantuvieron precio cero, por separado y en cesta anónima, una **turmalina en Lozano Gemólogos**, una **bolsa física Dr.Grandel en être belle** y **Frutas sorpresa unidad en ComeFruta**. En ComeFruta se llegó a la pantalla previa al pago con una unidad a 0 EUR, sin otro artículo ni suscripción, y 5,84 EUR de envío para un código postal público de prueba de Madrid; no se facilitó dirección ni se tramitó pedido. La primera cesta mostraba 6,05 € de gastos sin seleccionar destino. Son observaciones fechadas, no ofertas permanentes ni pedidos entregados. Se descartaron falsos positivos: una variante Origins no comprable y compra oculta en Cuatro Rayas.
 
 ## Créditos
 

@@ -37,7 +37,7 @@ RULES=[
  ('Belleza y salud','Cosmética','cosmética',r'\b(?:perfume|crema|champu|locion|lotion|serum|maquillaje|cosmetica)\b'),
  ('Joyería','Gemas y joyas','gema',r'\b(?:turmalina|rubelita|diamante|zafiro|esmeralda|rubi|gema)\b'),
  ('Joyería','Gemas y joyas','joyería',r'\b(?:pendientes|anillo|pulsera|collar de oro|collar de plata)\b'),
- ('Alimentación','Alimentos y bebidas','alimentación',r'\b(?:bombon(?:es)?|queso|aceite|vino|chocolate|alimento|galleta|caramelo)\b'),
+ ('Alimentación','Alimentos y bebidas','alimentación',r'\b(?:bombon(?:es)?|queso|aceite|vino|chocolate|alimento|galleta|caramelo|fruta|frutas|manzana|platano|naranja)\b'),
  ('Hogar y cocina','Muebles y decoración','hogar',r'\b(?:sofa|colchon|lampara|mesa|silla|sabanas|toalla|vajilla|sarten|cacerola)\b'),
  ('Moda','Ropa','ropa',r'\b(?:camiseta|vestido|chaqueta|pantalon|sudadera|abrigo|cazadora|gabardina|botas|falda|polo)\b'),
  ('Viaje','Equipaje','maleta',r'\b(?:maleta|equipaje|trolley)\b'),
