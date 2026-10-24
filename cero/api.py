@@ -52,6 +52,23 @@ class ScheduleIn(BaseModel):
 @app.get('/')
 def home():return FileResponse(STATIC/'index.html')
 
+@app.get('/api/history')
+def history_view():
+    from cero.history import examples
+    return {'examples':examples()}
+
+@app.get('/api/leads')
+def community_leads():
+    from cero.signals import visible
+    return {'leads':visible()}
+
+@app.get('/api/history/image/{key}')
+def history_image(key:str):
+    from cero.history import evidence_path
+    path=evidence_path(key)
+    if not path:raise HTTPException(404,'Captura no disponible en esta instalación')
+    return FileResponse(path,media_type='image/png',headers={'Cache-Control':'private, max-age=3600'})
+
 @app.get('/api/deals')
 def deals(country:str='',store:str='',category:str='',subcategory:str='',product_type:str='',q:str='',min_discount:float=Query(0,ge=0,le=100),
  min_score:float=Query(0,ge=0,le=100),free_only:int=0,hide_samples:int=1,known_only:int=0,stock_only:int=0,favorites:int=0,

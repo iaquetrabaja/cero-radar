@@ -78,6 +78,8 @@ Necesita ordenador encendido, conectado y sin suspensión. Para funcionar con el
 
 ## Amazon
 
+La sección **Ofertas pasadas** muestra ejemplos documentados con capturas aportadas por el usuario. Sus precios históricos no se mezclan con ofertas activas, reposiciones, puntuaciones de Gemini ni avisos. Los enlaces exactos localizados abren el precio actual, con el ID de Amazon configurado. Los modelos parecidos se identifican como referencias similares: su precio actual no se atribuye automáticamente al modelo de la oferta pasada. Las capturas privadas se guardan únicamente en `data/private-history/` y no se incluyen en el repositorio público. El historial funciona sin esas capturas, pero las indica como no disponibles.
+
 Configura **tu propio ID** en `AMAZON_ASSOCIATE_TAG`. Los enlaces de salida lo incluyen; las URLs internas se guardan limpias para deduplicar. La interfaz identifica la afiliación. El parámetro de descuento de Amazon sirve para descubrir, nunca para probar una rebaja.
 
 El adaptador alterna búsquedas por producto, 32 marcas y 12 departamentos. Rota las páginas 1–4 y umbrales del 80% y 90%, incluyendo el 100%. Cada pasada normal hace 12 búsquedas (36 en una profunda) y abre también una selección de fichas cuyo listado oculta el precio de referencia. Los ASIN nuevos tienen prioridad y se comprueba el precio de la talla o color seleccionados en la ficha. Hay una revisión específica de Amazon cada 10 minutos, cuando el motor queda libre; se configura en el panel. Los precios y referencias anunciados no acreditan por sí solos el ahorro frente al mercado.
@@ -110,3 +112,13 @@ El 24 de octubre de 2026 mantuvieron precio cero, por separado y en cesta anóni
 ## Créditos
 
 MIT para este código. [Scrapling](https://github.com/D4Vinci/Scrapling) conserva su licencia. Se estudió [omkarcloud/amazon-scraper](https://github.com/omkarcloud/amazon-scraper); este proyecto implementa su propio adaptador. Los dominios españoles proceden de información pública de ecomNinja y ExpoTienda; los registros conservan origen. Marcas e imágenes pertenecen a sus titulares.
+
+
+## Descubrimiento y revisión de ceros
+
+El motor consulta catálogos WooCommerce y Shopify en paralelo: ceros y rebajas positivas son consultas independientes. Alterna páginas y tiendas, añade mapas de productos recientes y prioriza fichas nuevas antes de repetir las ya leídas. Cada catálogo conserva su estado y número real de productos leídos.
+
+Todos los candidatos a cero, incluidos los agotados, pasan por Gemini con la descripción principal y condiciones de venta. La cesta por sí sola no los confirma: hace falta evaluación aceptada. Venta exclusivamente telefónica, fichas de prueba, presupuestos, muestras y regalos condicionados se separan de los gratis. Una exclusión de Gemini exige una cita real de la restricción; estar agotado o tener portes no justifica descartarlo. Si falta IA o se agota el presupuesto, el rastreo sigue y el cero queda pendiente. Los registros anteriores también se vuelven a evaluar; los ceros reales sin stock conservan revisión cada doce horas.
+
+
+Las comunidades y su RSS aportan otra vía de descubrimiento: se extraen pistas y se abren las tiendas para comprobarlas. Los canjes con cuenta o cupón se muestran en un bloque aparte, con sus condiciones e imagen y sin contarlos como ceros confirmados. Los avisos sin imagen propia se conservan internamente. Una ficha de plantilla no se convierte en éxito aunque su cesta acepte el cero. En Shopify se contrasta además el stock y la talla con los datos de la variante, porque el formulario HTML puede ocultarse después de cargar JavaScript.

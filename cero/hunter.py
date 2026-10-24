@@ -102,6 +102,11 @@ def check_url(url,previous=None):
         return _failed(url,previous,'unverified','La ficha no publica un precio principal verificable. Puede haber terminado la oferta.')
     d=next((d for d in offers if d['variant']==previous.get('variant','')),offers[0])
     d.setdefault('page_status','ok')
+    from cero.freecheck import inspect
+    inspect(d,soup)
+    if d.get('status')=='rejected':return d
+    from cero.shopifycheck import inspect as inspect_shopify
+    inspect_shopify(d,soup)
     ref=d.get('reference_price') or 0
     if d.get('price',0)>0 and ref>5000 and ref>20*d['price']:
         d['status']='conditional'

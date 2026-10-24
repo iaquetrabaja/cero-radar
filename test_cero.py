@@ -1,5 +1,6 @@
 """Tests de regresión para los fallos observados en fichas y listados reales."""
 import json
+import html
 import tempfile
 import unittest
 from datetime import datetime,timedelta,timezone
@@ -83,6 +84,14 @@ class ExtractionTests(unittest.TestCase):
 
 
 class AmazonDiscoveryTests(unittest.TestCase):
+    def test_historical_cases_are_never_live_deals(self):
+        from cero.history import examples,evidence_path
+        with patch('cero.history.cache_image',return_value='/static/cache/'+'a'*64+'.webp'):
+            rows=examples()
+        self.assertEqual(len(rows),11);self.assertTrue(all(d['status']=='historical' for d in rows))
+        robot=next(d for d in rows if d['id']=='conga-q200-xtreme')
+        self.assertEqual((robot['historical_price'],robot['reference_price']),(22.9,399))
+        self.assertIsNone(evidence_path('../../.env'))
     def test_access_challenge_is_not_empty_search(self):
         from cero.http import _blocked
         self.assertTrue(_blocked(200,'<html><script>function triggerInterstitialChallenge(){}</script></html>'))
@@ -110,6 +119,46 @@ class AmazonDiscoveryTests(unittest.TestCase):
         self.assertEqual(rows[4]['rh'],['p_8:90-'])
 
 
+class ShopifyVariantTests(unittest.TestCase):
+    def test_stock_overrules_hidden_html_cart_form(self):
+        from cero.shopifycheck import apply_variant
+        d={'price':0,'status':'verified','availability':'in_stock','image':IMAGE,'_cart_eligible':True}
+        apply_variant(d,{'images':[],'variants':[{'id':123,'price':0,'available':False,'title':'40'}]},'123')
+        self.assertEqual(d['status'],'expired');self.assertEqual(d['availability'],'out_of_stock')
+        self.assertNotIn('_cart_eligible',d);self.assertEqual(d['image_status'],'missing');self.assertEqual(d['variant'],'40')
+    def test_other_size_cannot_confirm_selected_size(self):
+        from cero.shopifycheck import apply_variant
+        d={'price':0,'status':'candidate','_cart_eligible':True}
+        apply_variant(d,{'variants':[{'id':124,'price':0,'available':True}]},'123')
+        self.assertEqual(d['status'],'unverified');self.assertNotIn('_cart_eligible',d)
+
+
+class CommunityTests(unittest.TestCase):
+    def test_zero_price_shipping_and_digital_posts_are_not_product_leads(self):
+        from cero.signals import listing
+        def article(title,host):
+            return '<article><div data-vue3="'+html.escape(json.dumps({'props':{'thread':{'threadId':'1','title':title,'linkHost':host,'price':0,'type':'Deal','merchant':{'merchantName':'Tienda'}}}},ensure_ascii=False),quote=True)+'"></div><a class="thread-link" href="https://www.chollometro.com/ofertas/1">Ver</a></article>'
+        h=article('Dos fundas para tablet a cero','www.mi.com')+article('Envío gratis en toda la web','tienda.es')+article('Juego gratis free to play','store.steampowered.com')
+        rows=listing(h);self.assertEqual(len(rows),1);self.assertEqual(rows[0]['status'],'lead');self.assertNotEqual(rows[0].get('verification_level'),'cart')
+
+
+class FrontierTests(unittest.TestCase):
+    def test_catalog_cents_and_discount_only_find_candidates(self):
+        from cero.frontier import catalog_rows
+        payload=[{'name':'Robot','permalink':URL,'prices':{'price':'1999','regular_price':'39900','currency_minor_unit':2,'currency_code':'EUR'},'is_in_stock':True},
+                 {'name':'Archivo','permalink':URL+'/archivo','is_virtual':True,'prices':{'price':'0'}}]
+        rows,read=catalog_rows(payload,'tienda.es','WooCommerce')
+        self.assertEqual(read,2);self.assertEqual(len(rows),1);self.assertEqual(rows[0]['price'],19.99)
+        self.assertGreater(rows[0]['discount_pct'],90);self.assertNotEqual(rows[0].get('status'),'verified')
+    def test_woocommerce_probes_zero_and_positive_sales_separately(self):
+        from cero.frontier import catalog_probe
+        with patch('cero.frontier.http.get',return_value=(200,'[]','https://tienda.es/')),patch('cero.frontier.health'):
+            with patch('cero.frontier.http.get',return_value=(200,'[]','https://tienda.es/')) as get:
+                catalog_probe({'domain':'tienda.es','platform':'WooCommerce','url':'https://tienda.es'},3)
+                urls=[call.args[0] for call in get.call_args_list]
+        self.assertEqual(len(urls),2);self.assertIn('max_price=0',urls[0]);self.assertIn('on_sale=true&page=3',urls[1]);self.assertNotIn('max_price=0',urls[1])
+
+
 class PolicyTests(unittest.TestCase):
     def test_product_sku_fragment_survives(self):
         u='https://tienda.es/p#/sku/189168'
@@ -133,9 +182,63 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(d['price'],20);self.assertFalse(d['is_free']);self.assertEqual(d['status'],'candidate');self.assertLessEqual(d['score'],40)
     def test_confirmed_zero_interest_is_not_low_because_shipping_unknown(self):
         d={'price':0,'status':'verified','verification_level':'cart','delivery_status':'shipping_required'}
-        analyzer._apply(d,{'score':10,'reason':'Gastos desconocidos'})
+        analyzer._apply(d,{'score':10,'reason':'Gastos desconocidos','free_assessment':'accepted'})
         self.assertEqual(d['ai_score'],10);self.assertEqual(d['score'],96)
         self.assertTrue(d['score_source'].startswith('priority+'))
+
+
+class FreeReviewTests(unittest.TestCase):
+    def test_phone_sale_rejected_before_cart(self):
+        from cero.freecheck import inspect
+        d={'title':'Escáner Spectrum','price':0,'url':URL,'status':'candidate','evidence':[],'_cart_eligible':True}
+        inspect(d,BeautifulSoup('<main><div class="summary">ÚNICAMENTE VENTA TELEFÓNICA. ATENCIÓN AL 677653291</div></main>','lxml'))
+        self.assertEqual(d['status'],'rejected');self.assertNotIn('_cart_eligible',d)
+        self.assertIn('VENTA TELEFÓNICA',d['sale_context'])
+    def test_dummy_product_rejected_even_without_stock(self):
+        from cero.freecheck import inspect
+        d={'title':'PRUEBA5-','price':0,'url':'https://farmaciasantaursula.es/prueba5/','status':'expired','availability':'out_of_stock','evidence':[]}
+        inspect(d,BeautifulSoup('<main>PRUEBA5- 0,00 € Sin existencias</main>','lxml'))
+        self.assertEqual(d['status'],'rejected')
+    def test_phone_contact_alone_does_not_reject(self):
+        from cero.freecheck import inspect
+        d={'title':'Robot aspirador','price':0,'url':URL,'status':'candidate'}
+        inspect(d,BeautifulSoup('<div class="summary">Producto gratuito. Atención telefónica 677653291</div>','lxml'))
+        self.assertEqual(d['status'],'candidate')
+    def test_condition_is_supplied_to_gemini_without_related_products(self):
+        from cero.freecheck import inspect
+        d={'title':'Bolsa','url':URL,'price':0}
+        inspect(d,BeautifulSoup('<div class="summary">Regalo al comprar dos cremas</div><section class="related">Venta telefónica de otro producto</section>','lxml'))
+        prompt=analyzer._prompt([d])
+        self.assertIn('Regalo al comprar dos cremas',prompt);self.assertNotIn('Venta telefónica de otro producto',prompt)
+    def test_ai_veto_overrules_cart_and_priority_floor(self):
+        d={'price':0,'status':'verified','verification_level':'cart','delivery_status':'shipping_required','availability':'in_stock','sale_context':'Regalo al comprar dos cremas'}
+        analyzer._apply(d,{'score':98,'free_assessment':'rejected','exclusion_type':'conditional_purchase','exclusion_quote':'Regalo al comprar dos cremas','reason':'Regalo condicionado a comprar otro producto'})
+        self.assertEqual(d['status'],'rejected');self.assertEqual(d['score'],0)
+    def test_missing_ai_assessment_never_confirms_free(self):
+        d={'price':0,'status':'verified','verification_level':'cart','delivery_status':'shipping_required'}
+        analyzer._apply(d,{'score':100,'verdict':'gratis'})
+        self.assertEqual(d['status'],'conditional');self.assertLessEqual(d['score'],40)
+    def test_ai_cannot_promote_missing_cart_or_stock(self):
+        d={'price':0,'status':'expired','availability':'out_of_stock','page_status':'ok','verification_level':'page'}
+        analyzer._apply(d,{'score':100,'free_assessment':'accepted'})
+        self.assertEqual(d['status'],'expired');self.assertEqual(d['verdict'],'vigilar')
+    def test_accepted_review_does_not_override_hard_rejection(self):
+        d={'price':0,'status':'rejected','verification_level':'cart'}
+        analyzer._apply(d,{'score':100,'free_assessment':'accepted'})
+        self.assertEqual(d['status'],'rejected');self.assertEqual(d['score'],0)
+    def test_ai_cannot_discard_zero_merely_because_stock_is_missing(self):
+        d={'price':0,'status':'expired','availability':'out_of_stock','page_status':'ok','sale_context':'Sin existencias'}
+        analyzer._apply(d,{'score':0,'free_assessment':'rejected','exclusion_type':'placeholder','exclusion_quote':'Sin existencias','reason':'Está agotado'})
+        self.assertEqual(d['status'],'expired');self.assertEqual(d['free_review'],'uncertain')
+    def test_shipping_threshold_is_not_a_purchase_requirement(self):
+        d={'sale_context':'Envío gratis por compras superiores a 60€'}
+        self.assertFalse(analyzer._grounded_exclusion(d,{'exclusion_type':'conditional_purchase','exclusion_quote':'Envío gratis por compras superiores a 60€'}))
+    def test_template_page_is_not_confirmed_even_if_ai_accepts(self):
+        from cero.freecheck import inspect
+        d={'title':'Flor 003','price':0,'url':URL,'status':'verified','verification_level':'cart'}
+        inspect(d,BeautifulSoup('<div class="summary">Texto descriptivo. Lorem ipsum dolor sit amet.</div>','lxml'))
+        analyzer._apply(d,{'score':100,'free_assessment':'accepted'})
+        self.assertEqual(d['status'],'conditional');self.assertEqual(d['free_review'],'uncertain')
 
 
 class ClassificationTests(unittest.TestCase):
@@ -160,7 +263,7 @@ class PersistenceTests(unittest.TestCase):
     def tearDown(self):
         self.c.close();db.DB_PATH=self.original;self.tmp.cleanup()
     def put(self,**extra):
-        d={'url':URL,'title':'Robot aspirador de prueba','price':0,'availability':'out_of_stock','status':'expired','page_status':'ok','image':'/static/cache/'+'a'*64+'.webp','image_status':'verified'};d.update(extra);db.upsert(self.c,d);self.c.commit()
+        d={'url':URL,'title':'Robot aspirador de prueba','price':0,'availability':'out_of_stock','status':'expired','page_status':'ok','image':'/static/cache/'+'a'*64+'.webp','image_status':'verified','free_review':'accepted'};d.update(extra);db.upsert(self.c,d);self.c.commit()
     def test_zero_out_of_stock_due_in_twelve_hours(self):
         self.put();r=self.c.execute('SELECT * FROM restocks').fetchone()
         self.assertEqual((datetime.fromisoformat(r['next_check'])-datetime.fromisoformat(r['last_checked'])).total_seconds(),43200)
@@ -203,6 +306,19 @@ class PersistenceTests(unittest.TestCase):
     def test_hidden_sale_is_not_restock(self):
         self.put();self.put(page_status='unavailable')
         self.assertEqual(self.c.execute('SELECT active FROM restocks').fetchone()[0],0)
+    def test_zero_cannot_be_persisted_verified_without_ai_review(self):
+        self.put(status='verified',availability='in_stock',free_review='pending')
+        r=self.c.execute('SELECT * FROM deals').fetchone()
+        self.assertEqual(r['status'],'conditional');self.assertEqual(db.query_deals(self.c,status='verified'),[])
+    def test_zero_notification_requires_accepted_review(self):
+        from cero.telegram import enqueue
+        self.put(status='verified',availability='in_stock')
+        d=db.unpack(self.c.execute('SELECT * FROM deals').fetchone());d['free_review']='uncertain'
+        enqueue(self.c,d['id'],d);self.assertEqual(self.c.execute('SELECT COUNT(*) FROM notifications').fetchone()[0],0)
+    def test_shopify_variant_size_completion_keeps_identity(self):
+        self.put(url='https://tienda.es/products/zapato?variant=123',variant='')
+        self.put(url='https://tienda.es/products/zapato?variant=123',variant='40')
+        self.assertEqual(self.c.execute('SELECT COUNT(*) FROM deals').fetchone()[0],1)
     def test_budget_only_charges_current_day(self):
         start,end=db.budget_window()
         yesterday=(datetime.fromisoformat(start)-timedelta(seconds=1)).isoformat(timespec='seconds')

@@ -1,0 +1,159 @@
+[
+  {
+    "id": "urban-sprint-silver",
+    "title": "Cecotec Urban Sprint Silver 28 pulgadas",
+    "store": "Amazon",
+    "historical_price": 72.9,
+    "reference_price": 849,
+    "reference_note": "Precio de referencia de Amazon: 849 €.",
+    "variant": "Plata · batería 360 Wh",
+    "url": "https://www.amazon.es/dp/B0GJZZKFYT",
+    "image_url": "https://m.media-amazon.com/images/I/71dwHwMTbNL._AC_SL1321_.jpg",
+    "note": "Oferta finalizada. El enlace permite consultar el precio actual."
+  },
+  {
+    "id": "conga-q200-xtreme",
+    "title": "Cecotec Conga Q200 X-Treme",
+    "store": "Amazon",
+    "historical_price": 22.9,
+    "reference_price": 399,
+    "reference_note": "Precio de referencia en Cecotec: 399 €.",
+    "variant": "25000 Pa · blanco",
+    "date": "2026-10-23",
+    "url": "https://www.amazon.es/dp/B0HHK4ZCFR",
+    "reference_url": "https://cecotec.es/es/robots-aspiradores/conga-q200-x-treme",
+    "image_url": "https://m.media-amazon.com/images/I/61UgmY4p9QL._AC_SL1500_.jpg",
+    "note": "Oferta finalizada. El enlace permite consultar el precio actual."
+  },
+  {
+    "id": "spiuk-profit-azul",
+    "title": "Maillot Spiuk Profit Summer azul brillante",
+    "store": "Deporvillage",
+    "historical_price": 0,
+    "variant": "Talla L",
+    "evidence_key": "spiuk",
+    "crop": [
+      35,
+      575,
+      160,
+      165
+    ],
+    "note": "Oferta finalizada a 0 €. Ficha actual no disponible."
+  },
+  {
+    "id": "spiuk-profit-rojo",
+    "title": "Maillot Spiuk Profit Summer rojo brillante",
+    "store": "Deporvillage",
+    "historical_price": 0,
+    "variant": "Talla XL",
+    "evidence_key": "spiuk",
+    "crop": [
+      35,
+      805,
+      160,
+      165
+    ],
+    "note": "Oferta finalizada a 0 €. Ficha actual no disponible."
+  },
+  {
+    "id": "spiuk-anatomic-negro",
+    "title": "Maillot Spiuk Anatomic negro pizarra",
+    "store": "Deporvillage",
+    "historical_price": 0,
+    "variant": "Talla M",
+    "evidence_key": "spiuk",
+    "crop": [
+      35,
+      1040,
+      160,
+      165
+    ],
+    "note": "Oferta finalizada a 0 €. Ficha actual no disponible."
+  },
+  {
+    "id": "spiuk-anatomic-amarillo",
+    "title": "Maillot Spiuk Anatomic amarillo limón",
+    "store": "Deporvillage",
+    "historical_price": 0,
+    "variant": "Talla M",
+    "evidence_key": "spiuk",
+    "crop": [
+      35,
+      1275,
+      160,
+      165
+    ],
+    "note": "Oferta finalizada a 0 €. Ficha actual no disponible."
+  },
+  {
+    "id": "spiuk-gravel-gris",
+    "title": "Maillot Spiuk All Terrain Gravel gris oscuro",
+    "store": "Deporvillage",
+    "historical_price": 0,
+    "variant": "Talla XXL",
+    "evidence_key": "spiuk",
+    "crop": [
+      35,
+      1510,
+      160,
+      165
+    ],
+    "note": "Oferta finalizada a 0 €. Ficha actual no disponible."
+  },
+  {
+    "id": "drumfit-pending",
+    "title": "Bicicleta indoor Cecotec",
+    "store": "Amazon",
+    "historical_price": 26.9,
+    "date": "2026-10-23",
+    "identification_pending": false,
+    "note": "Oferta finalizada. El enlace abre un modelo similar al precio actual; el importe histórico corresponde al producto de la oferta.",
+    "variant": "Referencia similar: DrumFit Indoor 20000 Race",
+    "url": "https://cecotec.es/es/bicicletas-estaticas-e-indoor/drumfit-indoor-20000-race",
+    "image_url": "https://media.cecotec.cloud/07243/drumfit-indoor-20000-race_i6yfhr_1.png",
+    "current_price": 229.0,
+    "approximate_match": true
+  },
+  {
+    "id": "conga-power-home-pending",
+    "title": "Cecotec Conga Power Home",
+    "store": "Amazon",
+    "historical_price": 99,
+    "date": "2026-10-23",
+    "identification_pending": false,
+    "note": "Oferta finalizada. El enlace abre un modelo similar al precio actual; el importe histórico corresponde al producto de la oferta.",
+    "variant": "Referencia similar: Conga 9990 AI Spin Revolution Ultra Power Home",
+    "url": "https://cecotec.es/es/robots-aspiradores/conga-9990-ai-spin-revolution-ultra-power-home",
+    "image_url": "https://media.cecotec.cloud/a01_eu01_100148/conga-9990-ai-spin-revolution-ultra-power-home_e0k9gz_1.png",
+    "current_price": 199.0,
+    "approximate_match": true
+  },
+  {
+    "id": "bongo-pending",
+    "title": "Patinete eléctrico Cecotec",
+    "store": "Amazon",
+    "historical_price": 24.9,
+    "date": "2026-10-23",
+    "identification_pending": false,
+    "note": "Oferta finalizada. El enlace abre un modelo similar al precio actual; el importe histórico corresponde al producto de la oferta.",
+    "variant": "Referencia similar: Bongo M20",
+    "url": "https://cecotec.es/es/patinetes-electricos/bongo-serie-m20",
+    "image_url": "https://media.cecotec.cloud/07105/bongo-serie-m20_srk00z_1.png",
+    "current_price": 279.0,
+    "approximate_match": true
+  },
+  {
+    "id": "bolero-pending",
+    "title": "Frigorífico Cecotec de dos puertas negro",
+    "store": "Amazon",
+    "historical_price": 79.5,
+    "date": "2026-10-23",
+    "identification_pending": false,
+    "note": "Oferta finalizada. El enlace abre un modelo similar al precio actual; el importe histórico corresponde al producto de la oferta.",
+    "variant": "Referencia similar: Bolero CoolMarket 2D 211 Black E",
+    "url": "https://cecotec.es/es/frigorificos-2-puertas/bolero-coolmarket-2d-211-black-e",
+    "image_url": "https://media.cecotec.cloud/02133/bolero-coolmarket-2d-211-black-e_nzadqa_1.png",
+    "current_price": 229.0,
+    "approximate_match": true
+  }
+]

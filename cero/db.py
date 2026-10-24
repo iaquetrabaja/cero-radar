@@ -3,6 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+from urllib.parse import urlparse,parse_qs
 from cero.config import BUDGET_TIMEZONE
 from cero.market import COUNTRY,CURRENCY,PROFILE
 from cero.config import DB_PATH, GEMINI_BUDGET_EUR
@@ -38,7 +39,8 @@ EXTRA={'status':"TEXT DEFAULT 'unverified'",'availability':"TEXT DEFAULT 'unknow
  'confidence':'REAL DEFAULT 0','known_store':'INTEGER DEFAULT 0','favorite':'INTEGER DEFAULT 0','evidence':"TEXT DEFAULT '[]'",
  'verification_level':"TEXT DEFAULT 'page'",'delivery_status':"TEXT DEFAULT 'unknown'",'next_review':'TEXT',
  'image_status':"TEXT DEFAULT 'pending'",'image_source':"TEXT DEFAULT ''",'gtin':"TEXT DEFAULT ''",'sku':"TEXT DEFAULT ''",'page_status':"TEXT DEFAULT 'unknown'",'subcategory':"TEXT DEFAULT ''",
- 'last_verified_at':'TEXT','best_price':'REAL','best_discount':'REAL','ai_score':'REAL','ai_reason':'TEXT','shipping_note':"TEXT DEFAULT ''"}
+ 'last_verified_at':'TEXT','best_price':'REAL','best_discount':'REAL','ai_score':'REAL','ai_reason':'TEXT','shipping_note':"TEXT DEFAULT ''",
+ 'sale_context':"TEXT DEFAULT ''",'free_review':"TEXT DEFAULT 'pending'",'free_review_reason':"TEXT DEFAULT ''"}
 _migrated=set()
 
 
@@ -53,6 +55,8 @@ def connect():
         cols={r['name'] for r in c.execute('PRAGMA table_info(deals)')}
         for col,typ in EXTRA.items():
             if col not in cols:c.execute(f'ALTER TABLE deals ADD COLUMN {col} {typ}')
+        # Los ceros antiguos también necesitan la nueva revisión semántica.
+        c.execute("UPDATE deals SET status='conditional',score=MIN(COALESCE(score,0),40),verdict='revisar' WHERE price=0 AND status='verified' AND COALESCE(free_review,'pending')!='accepted'")
         c.execute("UPDATE deals SET last_verified_at=(SELECT MAX(o.checked_at) FROM observations o WHERE o.deal_id=deals.id AND o.status='verified'),best_price=price,best_discount=discount_pct WHERE last_verified_at IS NULL AND status!='rejected' AND EXISTS(SELECT 1 FROM observations o WHERE o.deal_id=deals.id AND o.status='verified')")
         if setting(c,'taxonomy_version',0)<3:
             from cero.taxonomy import classify
@@ -79,6 +83,8 @@ def upsert(conn,deal):
     # Un ASIN de ficha ya identifica la variante. Completar su talla no crea otra oferta.
     if not old and host_of(url)==PROFILE.get('amazon_domain'):
         old=conn.execute('SELECT * FROM deals WHERE url=? ORDER BY found_at LIMIT 1',(url,)).fetchone()
+    if not old and '/products/' in urlparse(url).path and parse_qs(urlparse(url).query).get('variant'):
+        old=conn.execute('SELECT * FROM deals WHERE url=? ORDER BY found_at LIMIT 1',(url,)).fetchone()
     if not old:
         old=next((r for r in conn.execute("SELECT * FROM deals WHERE status='unverified'")
                   if canonical(r['url'] or '')==url and (r['variant'] or '')==variant),None)
@@ -94,6 +100,8 @@ def upsert(conn,deal):
     row['country']=COUNTRY;row['currency']=deal.get('currency') or CURRENCY
     row['known_store']=int(bool(known_store(url)));row['is_free']=int(row.get('price')==0)
     row['is_sample']=int(bool(row.get('is_sample')));row['checked_at']=deal.get('checked_at') or now()
+    if row.get('price')==0 and row.get('status')=='verified' and deal.get('free_review')!='accepted':
+        row.update(status='conditional',free_review='pending',score=min(row.get('score') or 0,40),verdict='revisar')
     if row.get('status')=='verified' and (row.get('price')==0 or (row.get('discount_pct') or 0)>=80):
         row['last_verified_at']=row['checked_at']
         row['best_price']=min(v for v in [row.get('best_price'),row.get('price')] if v is not None)
@@ -150,6 +158,7 @@ def unpack(row):
     d['buy_url']=affiliate_url(d.get('url') or '')
     try:d['evidence']=json.loads(d.get('evidence') or '[]')
     except (ValueError,TypeError):d['evidence']=[]
+    if d.get('price')==0 and d.get('status')=='verified' and d.get('free_review')!='accepted':d['status']='conditional'
     if d.get('status')=='verified' and (not d.get('checked_at') or d['checked_at']<cutoff()):d['status']='stale'
     if d.get('status')=='verified' and d.get('price')!=0 and (d.get('discount_pct') or 0)<80:d['status']='ended'
     if d.get('page_status')=='not_found' and d.get('last_verified_at'):d['status']='removed'

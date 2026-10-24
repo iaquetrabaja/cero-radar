@@ -3,7 +3,7 @@ import json
 import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor,as_completed
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from cero.db import connect,upsert,now,setting,set_setting,unpack
 from cero.analyzer import score_deals
 from cero.hunter import SEEDS,check_url,discovery_jobs,listing_job,search_job,catalog_job,candidate
@@ -46,7 +46,7 @@ def stop():
 
 def _save(conn,d):
     from cero.images import ensure_image
-    ensure_image(d)
+    if d.get('status') not in ('rejected','blocked','unverified') or d.get('last_verified_at'):ensure_image(d)
     key=upsert(conn,d);enqueue(conn,key,d);conn.commit()
     with _lock:
         STATE['checked']+=1
@@ -80,10 +80,12 @@ def _verify(conn,items,label):
 
 
 def priority_items(conn):
+    due=(datetime.now(timezone.utc)-timedelta(minutes=15)).isoformat(timespec='seconds')
+    retry=(datetime.now(timezone.utc)-timedelta(hours=6)).isoformat(timespec='seconds')
     # Las ofertas activas no esperan detrás de cientos de indicios sin confirmar.
-    hot=conn.execute("SELECT * FROM deals WHERE status='verified' AND (price=0 OR discount_pct>=80) ORDER BY favorite DESC,checked_at LIMIT 120").fetchall()
-    tracked=conn.execute("SELECT * FROM deals WHERE (favorite=1 OR last_verified_at IS NOT NULL) AND status!='rejected' AND page_status!='not_found' ORDER BY favorite DESC,checked_at LIMIT 60").fetchall()
-    pending=conn.execute("SELECT * FROM deals WHERE last_verified_at IS NULL AND status IN ('candidate','unverified','conditional','blocked') AND page_status!='not_found' ORDER BY checked_at LIMIT 60").fetchall()
+    hot=conn.execute("SELECT * FROM deals WHERE checked_at<=? AND status='verified' AND (price=0 OR discount_pct>=80) ORDER BY favorite DESC,checked_at LIMIT 60",(due,)).fetchall()
+    tracked=conn.execute("SELECT * FROM deals WHERE checked_at<=? AND (favorite=1 OR last_verified_at IS NOT NULL) AND status!='rejected' AND page_status!='not_found' ORDER BY favorite DESC,checked_at LIMIT 35",(due,)).fetchall()
+    pending=conn.execute("SELECT * FROM deals WHERE checked_at<=? AND last_verified_at IS NULL AND status IN ('candidate','unverified','conditional','blocked') AND page_status!='not_found' ORDER BY checked_at LIMIT 15",(retry,)).fetchall()
     return list({r['id']:unpack(r) for r in [*hot,*tracked,*pending]}.values())
 
 
@@ -104,6 +106,14 @@ def _run(profile,url):
             _amazon_pass(c,profile)
             _log(f'Amazon: {STATE["checked"]} fichas revisadas, {STATE["found"]} ofertas verificadas.')
             return
+        if profile not in ('watch','single'):
+            from cero.signals import collect as community
+            leads=community(_log)
+            if leads:_verify(c,leads,'community')
+            from cero.frontier import collect
+            _log('Buscando productos nuevos antes de repetir comprobaciones anteriores.')
+            collect(profile,_log,lambda rows:_verify(c,rows,'new_products'),_stop.is_set)
+            if not _stop.is_set():_amazon_pass(c,profile)
         existing=priority_items(c)
         watches=[dict(r) for r in c.execute('SELECT * FROM watches')]
         due_restocks=[unpack(r) for r in c.execute('SELECT d.* FROM deals d JOIN restocks r ON r.deal_id=d.id WHERE r.active=1 AND r.next_check<=?',(now(),))]
@@ -113,7 +123,6 @@ def _run(profile,url):
         _verify(c,items,'checking')
         if not _stop.is_set() and profile!='single':set_setting(c,'last_watch',now());c.commit()
         if not _stop.is_set() and profile not in ('watch','single'):
-            _amazon_pass(c,profile)
             from cero.adapters import deporvillage
             from cero.hunter import health
             import time

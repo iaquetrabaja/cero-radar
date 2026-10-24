@@ -10,6 +10,7 @@ from cero.db import now
 
 def enqueue(conn,deal_id,deal):
     if deal.get('status')!='verified' or deal.get('is_sample') or deal.get('image_status')!='verified':return
+    if deal.get('price')==0 and deal.get('free_review')!='accepted':return
     if deal.get('price')!=0 and (deal.get('discount_pct') or 0)<80:return
     if deal.get('price')!=0 and (deal.get('score') or 0)<85:return
     previous=conn.execute('SELECT status FROM observations WHERE deal_id=? ORDER BY id DESC LIMIT 1 OFFSET 1',(deal_id,)).fetchone()
@@ -28,6 +29,7 @@ def armed():
 
 def send_deal(deal):
     if not armed() or deal.get('status')!='verified' or deal.get('is_sample') or deal.get('image_status')!='verified':return False
+    if deal.get('price')==0 and deal.get('free_review')!='accepted':return False
     if not deal.get('checked_at') or (datetime.now(timezone.utc)-datetime.fromisoformat(deal['checked_at'])).total_seconds()>7200:return False
     if deal.get('price')!=0 and (deal.get('discount_pct') or 0)<80:return False
     image=deal.get('image','')
