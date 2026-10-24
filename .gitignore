@@ -1,0 +1,9 @@
+.env
+data/
+__pycache__/
+*.pyc
+.venv/
+venv/
+cero/static/cache/
+config/market.local.json
+*.log
