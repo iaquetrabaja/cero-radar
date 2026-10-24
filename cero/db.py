@@ -167,7 +167,8 @@ def query_deals(conn,**f):
                 clauses.append("(status='stale' OR (status='verified' AND checked_at < ?))");params.append(cutoff())
             else:
                 clauses.append(key+'=?');params.append(f[key])
-                if key=='status' and f[key]=='verified':clauses.append('checked_at >= ?');params.append(cutoff())
+                if key=='status' and f[key]=='verified':
+                    clauses.extend(['checked_at >= ?','(price=0 OR discount_pct>=80)']);params.append(cutoff())
     for key in ('store','q'):
         if f.get(key):
             cols=['store'] if key=='store' else ['title','store','product_type','variant']

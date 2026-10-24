@@ -173,6 +173,20 @@ class PersistenceTests(unittest.TestCase):
         self.put(price=150,reference_price=200,discount_pct=25,status='verified',availability='in_stock')
         rows=db.query_deals(self.c,status='radar')
         self.assertEqual(rows[0]['best_price'],20);self.assertEqual(rows[0]['status'],'ended')
+        self.assertEqual(db.query_deals(self.c,status='verified'),[])
+    def test_alert_queue_rearms_only_when_price_improves(self):
+        from cero.telegram import enqueue
+        self.put(price=20,reference_price=200,discount_pct=90,status='verified',availability='in_stock',score=90)
+        row=db.unpack(self.c.execute('SELECT * FROM deals').fetchone());enqueue(self.c,row['id'],row)
+        self.c.execute('UPDATE notifications SET sent_at=?',(db.now(),));self.c.commit()
+        enqueue(self.c,row['id'],row)
+        self.assertIsNotNone(self.c.execute('SELECT sent_at FROM notifications').fetchone()[0])
+        row['price']=0;enqueue(self.c,row['id'],row)
+        self.assertIsNone(self.c.execute('SELECT sent_at FROM notifications').fetchone()[0])
+    def test_telegram_remains_disabled(self):
+        from cero import telegram
+        with patch.dict('os.environ',{'TELEGRAM_ENABLED':'false'}):
+            self.assertFalse(telegram.armed());self.assertFalse(telegram.send_deal({'price':0}))
     def test_budget_reserved_before_request(self):
         self.c.execute('INSERT INTO usage(model,est_eur,created_at) VALUES(?,?,?)',('test',.79,db.now()));self.c.commit()
         with patch.object(analyzer,'GEMINI_BUDGET_EUR',.8),patch.object(analyzer,'GEMINI_API_KEY','test'),patch.object(analyzer.requests,'post') as post:
