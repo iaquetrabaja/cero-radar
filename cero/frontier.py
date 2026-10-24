@@ -12,6 +12,7 @@ from cero.money import discount_pct
 from cero.policy import canonical,allowed,host_of
 from bs4 import BeautifulSoup
 from cero.money import is_sample,is_digital
+from cero.market import CURRENCY
 
 
 def shopify_price_floor(store):
@@ -47,11 +48,12 @@ def catalog_rows(payload,host,platform):
         if internal_product_reason(p.get('permalink') or '/products/'+p.get('handle',''),p.get('title') or p.get('name',''),p.get('tags') if platform=='Shopify' else [],p.get('description') or ''):continue
         if platform=='WooCommerce':
             values=p.get('prices') or {};minor=int(values.get('currency_minor_unit',2))
+            if values.get('currency_code',CURRENCY)!=CURRENCY:continue
             try:price=int(values['price'])/10**minor;ref=int(values.get('regular_price') or 0)/10**minor
             except (KeyError,ValueError,TypeError):continue
             if p.get('is_virtual') or p.get('is_downloadable') or p.get('is_password_protected'):continue
             variants=[{'title':p.get('name',''),'url':p.get('permalink',''),'price':price,'reference_price':ref,
-                       'availability':'in_stock' if p.get('is_in_stock') else 'out_of_stock',
+                       'availability':'in_stock' if p.get('is_in_stock') is True else 'out_of_stock' if p.get('is_in_stock') is False else 'unknown',
                        'image':next((x.get('src','') for x in p.get('images',[]) if x.get('src')),'')}]
         else:
             variants=[]
@@ -60,7 +62,7 @@ def catalog_rows(payload,host,platform):
                 except (KeyError,ValueError,TypeError):continue
                 variants.append({'title':p.get('title',''),'url':f'https://{host}/products/{p["handle"]}?variant={v["id"]}',
                      'price':price,'reference_price':ref,'variant':v.get('title',''),
-                     'availability':'in_stock' if v.get('available') else 'out_of_stock',
+                     'availability':'in_stock' if v.get('available') is True else 'out_of_stock' if v.get('available') is False else 'unknown',
                      'image':next((x.get('src','') for x in p.get('images',[]) if x.get('src')),'')})
         for d in variants:
             d.update(discount_pct=discount_pct(d['price'],d['reference_price']),source='Descubrimiento '+platform,
@@ -74,7 +76,7 @@ def catalog_probe(store,page):
     if platform=='WooCommerce':
         # El cero y la rebaja positiva son consultas distintas: no limitar todo a max_price=0.
         path='/wp-json/wc/store/v1/products?per_page=100&orderby=price&order=asc&'
-        urls=[base+path+'max_price=0&page=1',base+path+f'on_sale=true&page={page}']
+        urls=[base+path+f'max_price=1&page={page}',base+path+f'on_sale=true&page={page}']
     else:urls=[base+f'/products.json?limit=250&page={page}']
     found=[];read=0
     for url in urls:
@@ -90,7 +92,7 @@ def catalog_probe(store,page):
     if platform=='Shopify':
         try:
             cheap,n=shopify_price_floor(store);found.extend(cheap);read+=n
-        except (ValueError,TypeError,KeyError):pass
+        except Exception:pass  # A failed cheap-first view must not lose the feed.
     return list({canonical(d['url']):d for d in found}.values()),read
 
 

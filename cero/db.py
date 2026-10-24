@@ -132,7 +132,7 @@ def upsert(conn,deal):
         next_check=(datetime.fromisoformat(row['checked_at'])+timedelta(hours=12)).isoformat(timespec='seconds')
         conn.execute('INSERT INTO restocks(url,deal_id,last_checked,next_check) VALUES(?,?,?,?) ON CONFLICT(url) DO UPDATE SET deal_id=excluded.deal_id,last_checked=excluded.last_checked,next_check=excluded.next_check,active=1',
                      (url,row['id'],row['checked_at'],next_check))
-    elif row.get('availability') in ('in_stock','preorder'):
+    elif row.get('availability') in ('in_stock','preorder') or (row.get('page_status')=='ok' and row.get('price')!=0):
         conn.execute('UPDATE restocks SET active=0,last_checked=? WHERE url=?',(row['checked_at'],url))
     return row['id']
 
@@ -188,7 +188,7 @@ def query_deals(conn,**f):
     for key in ('country','category','subcategory','product_type','status','score_source'):
         if f.get(key) and f[key]!='all':
             if key=='status' and f[key]=='radar':
-                clauses.append("(status='verified' OR (last_verified_at IS NOT NULL AND status IN ('stale','blocked','unverified','expired','conditional','candidate')) OR (price=0 AND availability='out_of_stock' AND page_status='ok' AND status='expired'))")
+                clauses.append("(status='verified' OR (last_verified_at IS NOT NULL AND status IN ('stale','blocked','unverified','expired','conditional','candidate')) OR (price=0 AND availability='out_of_stock' AND page_status='ok' AND status IN ('expired','conditional','unverified','candidate')))")
             elif key=='status' and f[key]=='stale':
                 clauses.append("(status='stale' OR (status='verified' AND checked_at < ?))");params.append(cutoff())
             else:

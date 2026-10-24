@@ -1,7 +1,7 @@
 """Datos de la variante Shopify: el formulario inicial puede quedar oculto al cargar JS."""
 import json
 import re
-from urllib.parse import urlparse,parse_qs
+from urllib.parse import urlparse,parse_qs,urljoin
 from cero import http
 
 
@@ -20,23 +20,36 @@ def apply_variant(deal,product,variant_id):
     deal['variant']=str(variant.get('public_title') or variant.get('title') or '')
     deal.setdefault('evidence',[]).append(f"Variante Shopify {variant_id}: available={variant.get('available')}.")
     if variant.get('price')!=0:
-        deal.update(status='unverified',conditions='El precio de la variante contradice el cero de la plantilla. Se requiere una nueva lectura.')
+        price=variant.get('price')
+        price=price/100 if type(price) in (int,float) and price>=0 else None
+        deal.update(price=price,is_free=False,discount_pct=None,status='unverified',availability='unknown',
+                    conditions='El precio de la variante contradice el cero de la plantilla. Se requiere una nueva lectura.')
+        deal['evidence'].append(f'Precio actual del catálogo de la variante: {price} {deal.get("currency","EUR")}.')
         deal.pop('_cart_eligible',None);return
-    if not product.get('images') and not product.get('featured_image'):
+    own_image=variant.get('featured_image') or product.get('featured_image') or next(iter(product.get('images') or []),'')
+    if isinstance(own_image,dict):own_image=own_image.get('src') or own_image.get('url') or ''
+    if own_image:
+        deal['image']=urljoin(deal.get('url',''),own_image)
+    else:
         deal.update(image='',image_status='missing')
         deal['evidence'].append('El producto no tiene imagen propia en su catálogo; no se utiliza la portada o el logo de la tienda.')
+    if type(variant.get('available')) is not bool:
+        deal.update(status='unverified',availability='unknown',conditions='El catálogo no declara el stock de la variante exacta.')
+        deal.pop('_cart_eligible',None);return
     if variant.get('available') is False:
         deal.update(status='expired',availability='out_of_stock',conditions='Precio cero observado, pero la variante exacta está agotada según la tienda. Revisión cada 12 horas.')
         deal.pop('_cart_eligible',None)
+    elif deal.get('availability')=='out_of_stock':
+        deal.update(status='candidate',availability='in_stock',conditions='La variante figura de nuevo disponible; falta contrastar la cesta y el envío antes de confirmar el cero.')
 
 
 def inspect(deal,soup):
     if deal.get('price')!=0:return
     form=soup.select_one('form[action*="cart/add"]')
     p=urlparse(deal['url']);match=re.search(r'/products/([^/]+)',p.path)
-    if not form or not match:return
+    if not match:return
     selected=parse_qs(p.query).get('variant',[''])[0]
-    field=form.select_one('input[name="id"],select[name="id"] option[selected]')
+    field=form.select_one('input[name="id"],select[name="id"] option[selected]') if form else None
     selected=selected or (field.get('value') if field else '')
     if not str(selected).isdigit():return
     try:

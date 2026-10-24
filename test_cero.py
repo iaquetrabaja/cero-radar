@@ -147,6 +147,24 @@ class AmazonDiscoveryTests(unittest.TestCase):
 
 
 class ShopifyVariantTests(unittest.TestCase):
+    def test_paid_variant_cannot_leave_a_stale_zero_restock(self):
+        from cero.shopifycheck import apply_variant
+        d={'url':'https://tienda.es/products/zapato?variant=123','price':0,'is_free':True,'status':'expired','availability':'out_of_stock','evidence':[]}
+        apply_variant(d,{'variants':[{'id':123,'price':39500,'available':False}]},'123')
+        self.assertEqual(d['price'],395);self.assertFalse(d['is_free']);self.assertEqual(d['availability'],'unknown')
+    def test_sold_out_variant_is_checked_without_cart_form(self):
+        from cero.shopifycheck import inspect
+        d={'url':'https://tienda.es/products/zapato?variant=123','price':0,'status':'candidate','evidence':[]}
+        product={'handle':'zapato','images':['//tienda.es/zapato.jpg'],'variants':[{'id':123,'price':0,'available':False,'title':'40'}]}
+        with patch('cero.shopifycheck.http.get',return_value=(200,json.dumps(product),'')) as get:
+            inspect(d,BeautifulSoup('<h1>Zapato</h1><p>Agotado</p>','lxml'))
+        self.assertEqual((d['status'],d['availability']),('expired','out_of_stock'))
+        self.assertEqual(d['image'],'https://tienda.es/zapato.jpg');get.assert_called_once()
+    def test_absent_stock_is_not_out_of_stock(self):
+        from cero.shopifycheck import apply_variant
+        d={'price':0,'status':'candidate','_cart_eligible':True}
+        apply_variant(d,{'variants':[{'id':123,'price':0}]},'123')
+        self.assertEqual(d['availability'],'unknown');self.assertNotIn('_cart_eligible',d)
     def test_cart_zero_requires_exactly_one_unit_and_correct_currency(self):
         from cero.cartcheck import shopify_cart_evidence
         cart={'currency':'EUR','item_count':1,'total_price':0,'items':[{'variant_id':123,'quantity':1,'price':0,'final_price':0,'line_price':0,'final_line_price':0,'requires_shipping':True}]}
@@ -199,7 +217,46 @@ class FrontierTests(unittest.TestCase):
             with patch('cero.frontier.http.get',return_value=(200,'[]','https://tienda.es/')) as get:
                 catalog_probe({'domain':'tienda.es','platform':'WooCommerce','url':'https://tienda.es'},3)
                 urls=[call.args[0] for call in get.call_args_list]
-        self.assertEqual(len(urls),2);self.assertIn('max_price=0',urls[0]);self.assertIn('on_sale=true&page=3',urls[1]);self.assertNotIn('max_price=0',urls[1])
+        self.assertEqual(len(urls),2);self.assertIn('max_price=1&page=3',urls[0]);self.assertIn('on_sale=true&page=3',urls[1]);self.assertNotIn('max_price=',urls[1])
+
+
+class StockFinderTests(unittest.TestCase):
+    def test_full_pages_advance_beyond_four_and_ignore_servers_repeating_a_page(self):
+        from cero.stockfinder import probe
+        products=[{'id':i,'name':'Pieza','permalink':URL+str(i),'is_in_stock':False,'prices':{'price':'0'},'images':[{'src':IMAGE}]} for i in range(100)]
+        store={'domain':'tienda.es','url':'https://tienda.es','platform':'WooCommerce'}
+        with patch('cero.stockfinder.http.get',return_value=(200,json.dumps(products),'')),patch('cero.stockfinder.health'):
+            _,_,first=probe(store,{'page':7})
+            _,_,second=probe(store,first)
+        self.assertEqual(first['page'],8);self.assertEqual(second['page'],1)
+    def test_exhausted_searches_do_not_require_a_buy_button(self):
+        from cero.footprints import restock_queries
+        with patch('cero.footprints.LANGUAGE','es'):
+            queries=restock_queries(['tienda.es'])
+        self.assertTrue(any('sin stock' in q for q in queries));self.assertTrue(any('bicicleta' in q for q in queries))
+        self.assertFalse(any('comprar' in q or 'añadir al' in q for q in queries))
+    def test_ignored_filters_currency_and_missing_stock_do_not_create_zero_watches(self):
+        from cero.stockfinder import probe
+        products=[{'id':i,'name':'Zapato','permalink':URL+str(i),'is_in_stock':stock,'prices':{'price':price,'regular_price':'100','currency_code':currency},'images':[{'src':IMAGE}]}
+                  for i,price,stock,currency in [(1,'0',False,'EUR'),(2,'1',False,'EUR'),(3,'0',True,'EUR'),(4,'',False,'EUR'),(5,'0',None,'EUR'),(6,'0',False,'USD')]]
+        with patch('cero.stockfinder.http.get',return_value=(200,json.dumps(products),'')) as get,patch('cero.stockfinder.health'):
+            rows,read,state=probe({'domain':'tienda.es','url':'https://tienda.es','platform':'WooCommerce'},{'page':7})
+        self.assertEqual([r['url'] for r in rows],[URL+'1']);self.assertEqual(read,6)
+        self.assertIn('max_price=1&stock_status[]=outofstock',get.call_args.args[0]);self.assertIn('page=7',get.call_args.args[0]);self.assertEqual(state['page'],1)
+    def test_collection_filter_does_not_stop_at_positive_product_or_mix_variants(self):
+        from cero.stockfinder import probe
+        markup='<main><a href="/products/pago">Pago</a><a href="/products/cero">Cero</a></main>'
+        paid={'handle':'pago','title':'Zapato pago','images':[IMAGE],'variants':[{'id':10,'price':100,'available':False}]}
+        zero={'handle':'cero','title':'Zapato cero','images':[IMAGE],'variants':[{'id':11,'price':0,'available':False},{'id':12,'price':0,'available':True},{'id':13,'price':100,'available':False}]}
+        replies=[(200,'{"products":[]}',''),(200,markup,''),(200,json.dumps(paid),''),(200,json.dumps(zero),'')]
+        with patch('cero.stockfinder.http.get',side_effect=replies),patch('cero.stockfinder.health'):
+            rows,read,state=probe({'domain':'tienda.es','url':'https://tienda.es','platform':'Shopify'})
+        self.assertEqual(len(rows),1);self.assertTrue(rows[0]['url'].endswith('variant=11'));self.assertEqual(read,2)
+    def test_variants_are_interleaved_to_discover_other_products(self):
+        from cero.stockfinder import diverse_candidates
+        rows=[{'url':f'https://tienda.es/products/uno?variant={i}'} for i in range(20)]+[{'url':'https://tienda.es/products/dos?variant=99'}]
+        selected=diverse_candidates(rows,known=[rows[0]['url']],limit=2)
+        self.assertEqual(selected,[rows[1],rows[-1]])
 
 
 class PolicyTests(unittest.TestCase):
@@ -340,6 +397,9 @@ class PersistenceTests(unittest.TestCase):
     def test_restock_in_stock_deactivates_watch(self):
         self.put();self.put(availability='in_stock',status='verified')
         self.assertEqual(self.c.execute('SELECT active FROM restocks').fetchone()[0],0)
+    def test_positive_price_ends_zero_watch_even_while_still_out_of_stock(self):
+        self.put();self.put(price=79,availability='out_of_stock',status='expired')
+        self.assertEqual(self.c.execute('SELECT active FROM restocks').fetchone()[0],0)
     def test_same_product_price_change_keeps_identity(self):
         self.put();self.put(price=5)
         self.assertEqual(self.c.execute('SELECT COUNT(*) FROM deals').fetchone()[0],1)
@@ -405,6 +465,11 @@ class PersistenceTests(unittest.TestCase):
         self.put()
         rows=db.query_deals(self.c,status='radar')
         self.assertEqual(len(rows),1);self.assertEqual(rows[0]['availability'],'out_of_stock')
+    def test_uncertain_zero_out_of_stock_survives_in_radar_without_being_available(self):
+        self.put(status='conditional',free_review='uncertain',score=10)
+        self.assertEqual(len(db.query_deals(self.c,status='radar')),1)
+        self.assertEqual(db.query_deals(self.c,status='verified'),[])
+        self.assertEqual(self.c.execute('SELECT active FROM restocks').fetchone()[0],1)
     def test_interesting_offer_stays_after_read_failure(self):
         self.put(price=20,reference_price=200,discount_pct=90,status='verified',availability='in_stock')
         self.put(price=20,reference_price=200,discount_pct=90,status='blocked',availability='unknown',page_status='unreadable')

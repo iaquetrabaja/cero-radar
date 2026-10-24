@@ -108,7 +108,7 @@ def check_url(url,previous=None):
     from cero.shopifycheck import inspect as inspect_shopify
     inspect_shopify(d,soup)
     ref=d.get('reference_price') or 0
-    if d.get('price',0)>0 and ref>5000 and ref>20*d['price']:
+    if (d.get('price') or 0)>0 and ref>5000 and ref>20*d['price']:
         d['status']='conditional'
         d['conditions']='Referencia de precio excepcionalmente alta: falta contraste independiente. No se publica como chollo verificado sólo por el porcentaje anunciado.'
     if previous.get('price') is not None and d['price']!=previous['price']:
@@ -126,7 +126,7 @@ def check_url(url,previous=None):
             if comparable and d.get('reference_price') and comparable['price']<d['reference_price']*.5 and d['price']>comparable['price']*.2:
                 ref_audit={'reason':'Otro vendedor del mismo GTIN publica un precio muy inferior al PVP tachado; ahorro real sin acreditar.',
                            'comparison_url':comparable['url'],'comparison_price':comparable['price']}
-        if ref_audit and d.get('price',0)>0:
+        if ref_audit and (d.get('price') or 0)>0:
             d['status']='conditional';d['conditions']=ref_audit['reason']
             d['evidence'].append(f"Contraste: {ref_audit['comparison_price']} EUR en {ref_audit['comparison_url']}")
         audit=c.execute('SELECT payload,checked_at FROM audits WHERE url=?',(canonical(final),)).fetchone()
@@ -270,6 +270,13 @@ def discovery_jobs(conn,profile):
         q=allq[(cur+i)%len(allq)]
         for engine in (motors[(cur+i)%len(motors)],motors[(cur+i+1)%len(motors)]):jobs.append(('search',engine,q,''))
     set_setting(conn,'query_cursor',(cur+n)%len(allq));conn.commit()
+    from cero.footprints import restock_queries
+    exhausted_queries=restock_queries([r['domain'] for r in conn.execute("SELECT domain FROM stores WHERE enabled=1 AND status='ok' ORDER BY products DESC,domain")])
+    rc=setting(conn,'restock_query_cursor',0);rn=8 if profile=='deep' else 4
+    for i in range(rn):
+        q=exhausted_queries[(rc+i)%len(exhausted_queries)]
+        for engine in (motors[(rc+i)%len(motors)],motors[(rc+i+2)%len(motors)]):jobs.append(('search',engine,q,''))
+    set_setting(conn,'restock_query_cursor',(rc+rn)%len(exhausted_queries));conn.commit()
     # Las fuentes con fallos repetidos descansan, sin bloquear las demás.
     cooldown={r['name'] for r in conn.execute('SELECT name FROM source_health WHERE next_retry>? AND failures>=2',(now(),))}
     return [j for j in jobs if not (j[0]=='listing' and j[1] in cooldown or j[0]=='search' and 'Buscador · '+j[1] in cooldown)]

@@ -64,6 +64,8 @@ Catálogos públicos WooCommerce y Shopify, páginas de ofertas, schema.org, Ama
 
 En Shopify combina la paginación del catálogo con la colección ordenada de menor a mayor precio. Así encuentra ceros que quedan fuera de las primeras 250 fichas. Contrasta cada variante con su propio precio, stock e imagen y prueba una cesta individual; los resultados del catálogo son candidatos hasta completar esas comprobaciones.
 
+Una pasada dedicada busca **ceros sin stock**: filtros públicos de disponibilidad y precio, páginas sucesivas del catálogo y variantes agotadas. Cada tienda conserva su posición, también más allá de la página 4. En WooCommerce se consulta hasta una unidad monetaria mínima y se exige cero exacto después, porque algunas tiendas ignoran el filtro `max_price=0`. Los filtros pueden ser ignorados por la tienda: siempre se contrasta la ficha y la variante, incluso si el agotado ya no tiene formulario de compra. Se alternan productos antes de repetir tallas. Los hallazgos con foto y ficha válida pasan por Gemini y entran en vigilancia de 12 horas; no se anuncian como disponibles.
+
 Las consultas descubren URLs; el cero del carrito vacío nunca se convierte en precio. El panel registra errores y resultados. No hay cobertura total de Internet ni resultados garantizados. No resuelve CAPTCHAs ni compra proxies. Scrapling realiza lecturas HTTP; el motor principal no abre un navegador por producto.
 
 ## Funcionar continuamente

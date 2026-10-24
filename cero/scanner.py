@@ -107,6 +107,9 @@ def _run(profile,url):
             _log(f'Amazon: {STATE["checked"]} fichas revisadas, {STATE["found"]} ofertas verificadas.')
             return
         if profile not in ('watch','single'):
+            from cero.stockfinder import collect as exhausted
+            _log('Buscando ceros agotados en catálogos y variantes, con paginación independiente.')
+            exhausted(profile,_log,lambda rows:_verify(c,rows,'new_restocks'),_stop.is_set)
             from cero.signals import collect as community
             leads=community(_log)
             if leads:_verify(c,leads,'community')

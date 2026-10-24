@@ -8,6 +8,24 @@ CMS=[('WooCommerce','inurl:producto'),('Shopify','inurl:products'),('PrestaShop'
 EXCLUDE='-inurl:carrito -inurl:cart -inurl:cesta -inurl:checkout -muestra -billete -pdf -descargable'
 
 
+def restock_queries(domains=()):
+    states={'es':['"agotado"','"sin stock"','"sin existencias"','"avísame"'],
+            'en':['"sold out"','"out of stock"','"notify me"'],
+            'fr':['"épuisé"','"rupture de stock"'],
+            'de':['"ausverkauft"','"nicht auf Lager"'],
+            'pt':['"esgotado"','"sem stock"'],
+            'it':['"esaurito"','"non disponibile"']}.get(LANGUAGE,['"out of stock"'])
+    # No buy-button requirement: merchants often remove it for sold-out items.
+    queries=[f'{zero} {state} site:.{PROFILE["tld"]} {EXCLUDE}' for zero in ZERO for state in states]
+    if LANGUAGE=='es':
+        queries += [f'{zero} {state} {kind} {EXCLUDE}' for zero in ZERO[:4] for state in states[:2]
+                    for kind in ('bicicleta','"robot aspirador"','portátil','zapatillas')]
+    for i,domain in enumerate(dict.fromkeys(domains)):
+        queries.append(f'site:{domain} {ZERO[i%len(ZERO)]} {states[i%len(states)]} {EXCLUDE}')
+    symbol={'EUR':'€','USD':'$','GBP':'£','MXN':'$'}.get(PROFILE['currency'],PROFILE['currency'])
+    return [q.replace('€',symbol).replace('EUR',PROFILE['currency']) for q in dict.fromkeys(queries)]
+
+
 def generate(domains=()):
     actions={'en':['"add to cart"','"add to basket"','"buy"'],'fr':['"ajouter au panier"','"acheter"'],'de':['"in den Warenkorb"','"kaufen"'],'it':['"aggiungi al carrello"','"comprare"'],'pt':['"adicionar ao carrinho"','"comprar"']}.get(LANGUAGE,ACTIONS)
     general=[f'{price} {action} site:.es {EXCLUDE}' for price in ZERO for action in actions]

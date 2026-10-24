@@ -123,7 +123,7 @@ def stores(q:str='',state:str='',limit:int=Query(50,ge=1,le=200),offset:int=Quer
 def restocks():
     c=connect()
     try:
-        return {'restocks':[dict(r) for r in c.execute("SELECT r.*,d.title,d.store,d.price,d.availability,d.status,d.image,d.image_status FROM restocks r JOIN deals d ON d.id=r.deal_id WHERE r.active=1 AND d.image_status='verified' AND d.page_status='ok' ORDER BY r.next_check")]}
+        return {'restocks':[dict(r) for r in c.execute("SELECT r.*,d.title,d.variant,d.store,d.price,d.availability,d.status,d.image,d.image_status,d.score,d.free_review,d.free_review_reason FROM restocks r JOIN deals d ON d.id=r.deal_id WHERE r.active=1 AND d.image_status='verified' AND d.page_status='ok' ORDER BY r.last_checked DESC")]}
     finally:c.close()
 
 @app.post('/api/stores')
