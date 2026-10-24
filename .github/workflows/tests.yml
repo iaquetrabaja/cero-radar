@@ -13,4 +13,4 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m unittest test_cero test_woocheck test_shopifycheck test_public_api -q
+      - run: python -m unittest test_cero test_woocheck test_shopifycheck test_public_api test_assessment_cache -q

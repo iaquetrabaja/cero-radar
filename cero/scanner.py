@@ -70,6 +70,9 @@ def _verify(conn,items,label):
             except Exception as exc:_log('No se pudo comprobar una ficha: '+type(exc).__name__);continue
             _progress(label,i,total)
             if d:
+                if d.get('price')==0 and d.get('status')=='verified':
+                    from cero.images import ensure_image
+                    ensure_image(d)
                 pending.append(d)
                 if len(pending)>=4:
                     score_deals(conn,pending,_log)

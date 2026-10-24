@@ -1,8 +1,11 @@
 """Gemini sólo evalúa evidencias; nunca confirma precios ni disponibilidad."""
 import hashlib
+import html
 import json
+import math
 import re
 import threading
+import unicodedata
 import uuid
 from curl_cffi import requests
 from cero.config import GEMINI_API_KEY,GEMINI_BUDGET_EUR,GEMINI_MODEL
@@ -56,6 +59,64 @@ def _priority(d):
 def fingerprint(d):
     fields=('url','variant','price','reference_price','availability','status','conditions','shipping','evidence','sale_context','review_hold')
     return hashlib.sha256(('v14-physical-packaging|'+json.dumps({k:d.get(k) for k in fields},sort_keys=True,ensure_ascii=False)).encode()).hexdigest()
+
+
+def _assessment_text(value):
+    return re.sub(r'\s+',' ',unicodedata.normalize('NFKC',html.unescape(str(value or '')))).strip().casefold()
+
+
+def prior_assessment(conn,d):
+    """Reuse a reviewed description only with matching identity and fresh proof.
+
+    This is not a stock/cart cache: the caller must already have verified the
+    current page, photograph, exact variant and individual physical cart. Raw
+    evidence wording can change without buying another identical AI review.
+    """
+    if (d.get('_verification_status')!='verified' or d.get('page_status')!='ok'
+        or d.get('image_status')!='verified' or d.get('verification_level')!='cart'
+        or d.get('availability') not in ('in_stock','preorder')
+        or type(d.get('price')) not in (int,float) or d['price']!=0
+        or d.get('review_hold') or d.get('is_sample') or d.get('_zero_template')
+        or d.get('purchase_rejected') or d.get('_cart_rejected')):
+        return None
+    context=_assessment_text(d.get('sale_context'))
+    if not context or not d.get('url') or not d.get('title'):
+        return None
+    rows=conn.execute("SELECT * FROM deals WHERE url=? AND COALESCE(variant,'')=? "
+        "AND price=0 AND free_review='accepted' AND status='verified' "
+        "AND COALESCE(review_hold,'')='' AND score_source LIKE '%gemini%' ORDER BY checked_at DESC LIMIT 5",
+        (d['url'],str(d.get('variant') or ''))).fetchall()
+    for row in rows:
+        old=dict(row)
+        if (old.get('title')!=d['title'] or old.get('availability')!=d.get('availability')
+            or old.get('currency')!=d.get('currency') or old.get('country')!=d.get('country')
+            or old.get('verification_level')!='cart' or old.get('page_status')!='ok'
+            or old.get('image_status')!='verified' or old.get('is_sample')
+            or old.get('shipping')!=d.get('shipping')
+            or _assessment_text(old.get('sale_context'))!=context):
+            continue
+        if d.get('shipping') is not None and (type(d['shipping']) not in (int,float)
+                                             or not math.isfinite(d['shipping']) or d['shipping']<0):
+            continue
+        # Fresh merchant restrictions may also be reported separately from the
+        # description. Only harmless wording of our own cart note may change.
+        conditions=_assessment_text(d.get('conditions'))
+        if conditions!=_assessment_text(old.get('conditions')):
+            cart_note=conditions.startswith(('producto a cero en cesta','producto añadido por separado a una cesta',
+                                             'producto a 0 eur en cesta'))
+            restriction=re.search(r'compra.{0,25}m[ií]nim|pedido.{0,25}m[ií]nim|al comprar|con (?:otra |la |tu )?compra|'
+                r'comprar otro|venta.{0,25}telef[oó]n|presupuesto|no se puede comprar|'
+                r'no (?:est[aá] )?disponible|condicionad|obligatori|muestra|sample|placeholder',conditions,re.I)
+            if not cart_note or restriction:
+                continue
+        score=old.get('ai_score');reason=str(old.get('ai_reason') or '').strip()
+        if type(score) not in (int,float) or not math.isfinite(score) or not 0<=score<=100 or not reason:
+            continue
+        return {'score':score,'reason':reason,'verdict':old.get('verdict') or 'gratis',
+            'free_assessment':'accepted','is_sample':False,'exclusion_type':'none','exclusion_quote':'',
+            'category':old.get('category'),'subcategory':old.get('subcategory'),'product_type':old.get('product_type'),
+            '_prior_score_source':old['score_source']}
+    return None
 
 
 def _grounded_exclusion(d,item):
@@ -138,7 +199,19 @@ def score_deals(conn,deals,log):
         cached=conn.execute('SELECT result FROM ai_cache WHERE fingerprint=?',(fingerprint(d),)).fetchone()
         if cached:
             _apply(d,json.loads(cached[0]));continue
+        previous=prior_assessment(conn,d)
+        if previous:
+            d['status']=d['_verification_status']
+            _apply(d,previous)
+            source=previous['_prior_score_source']
+            if d['score']>previous['score'] and not source.startswith('priority+'):
+                source='priority+'+source
+            d['score_source']=source
+            d['_assessment_cache']='prior_accepted_review'
+            log('Gemini: revisión aceptada reutilizada con la misma ficha y una cesta actual comprobada; sin llamada nueva.')
+            continue
         pending.append(d)
+    if not pending:return
     if not GEMINI_API_KEY:
         log('Gemini no configurado; puntuación por reglas identificada como tal.');return
     for offset in range(0,len(pending),4):
