@@ -5,3 +5,5 @@
 .restock-thumb{width:52px;height:52px;object-fit:contain;vertical-align:middle;margin-right:12px;background:white;border-radius:6px}
 
 .history-crop{position:relative;overflow:hidden;flex:none}.history-card .product-image{display:flex;align-items:center;justify-content:center;position:relative}.history-card .history-crop img{height:auto;object-fit:initial}.history-card .card-body{padding:20px}.history-card .price{font-size:26px;font-weight:800}.history-card .old-price{font-size:14px;color:#77817d;text-decoration:line-through}.history-card h3{margin:10px 0}.history-card .store{font-size:12px;color:#6d7672}.history-card .deal-badge{position:absolute;top:12px;left:12px;padding:6px 9px;background:#f0f1f2;color:#525c57;font-size:10px;font-weight:750;border-radius:5px;z-index:2}.history-card .product-image>img{width:100%;height:100%;object-fit:contain}
+
+#lead-panel .card-reason{display:block;-webkit-line-clamp:unset}
