@@ -130,7 +130,7 @@ def check_url(url,previous=None):
         if ref_audit and (d.get('price') or 0)>0:
             d['status']='conditional';d['conditions']=ref_audit['reason']
             d['evidence'].append(f"Contraste: {ref_audit['comparison_price']} EUR en {ref_audit['comparison_url']}")
-        audit=c.execute('SELECT payload,checked_at FROM audits WHERE url=?',(canonical(final),)).fetchone()
+        audit=c.execute('SELECT payload,checked_at FROM audits WHERE url=?',(canonical(d['url']),)).fetchone()
         if audit and d.get('price')==0 and (datetime.now(timezone.utc)-datetime.fromisoformat(audit['checked_at'])).total_seconds()<7200:
             proof=json.loads(audit['payload'])
             if proof.get('purchase_rejected'):

@@ -507,6 +507,24 @@ class PersistenceTests(unittest.TestCase):
         self.put(url='https://tienda.es/products/zapato?variant=123',variant='')
         self.put(url='https://tienda.es/products/zapato?variant=123',variant='40')
         self.assertEqual(self.c.execute('SELECT COUNT(*) FROM deals').fetchone()[0],1)
+    def test_shopify_bare_url_is_only_merged_with_evidenced_variant(self):
+        bare='https://tienda.es/products/zapato'
+        self.put(url=bare,variant='40',evidence=['Variante Shopify 123: available=False.'],favorite=1,review_hold='Incidencia pendiente')
+        self.put(url=bare+'?variant=124',variant='41')
+        self.put(url=bare+'?variant=123',variant='40')
+        self.assertEqual(self.c.execute('SELECT COUNT(*) FROM deals').fetchone()[0],2)
+        exact=self.c.execute('SELECT * FROM deals WHERE url=?',(bare+'?variant=123',)).fetchone()
+        self.assertEqual(exact['favorite'],1);self.assertEqual(exact['review_hold'],'Incidencia pendiente')
+    def test_existing_shopify_alias_keeps_history_but_counts_once(self):
+        bare='https://tienda.es/products/zapato'
+        self.put(url=bare+'?variant=123',variant='40')
+        self.put(url=bare,variant='40',evidence=['Variante Shopify 123: available=False.'],favorite=1)
+        self.put(url=bare+'?variant=123',variant='40',favorite=0)
+        self.assertEqual(len(db.query_deals(self.c,status='radar')),1)
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM deals WHERE status='merged'").fetchone()[0],1)
+        self.assertEqual(self.c.execute('SELECT COUNT(*) FROM observations').fetchone()[0],3)
+        exact=self.c.execute('SELECT * FROM deals WHERE url=?',(bare+'?variant=123',)).fetchone()
+        self.assertEqual(exact['favorite'],1)
     def test_budget_only_charges_current_day(self):
         start,end=db.budget_window()
         yesterday=(datetime.fromisoformat(start)-timedelta(seconds=1)).isoformat(timespec='seconds')

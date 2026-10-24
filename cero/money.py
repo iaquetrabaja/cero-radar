@@ -47,7 +47,7 @@ CURRENCY_COUNTRY = {
 
 SAMPLE_RE = re.compile(
     r"\b("
-    r"muestras?\b|free sample|sample pack|tester|probador|"
+    r"muestras?\d*\b|free sample|sample pack|tester|probador|"
     r"sachet|vial|travel size|miniatura de perfume|"
     r"prueba gratuita|free trial|d[ií]as de prueba|per[ií]odo de prueba|"
     r"versi[oó]n de prueba|trial only|muster(probe)?|probeabo|"

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -86,6 +87,25 @@ def upsert(conn,deal):
         old=conn.execute('SELECT * FROM deals WHERE url=? ORDER BY found_at LIMIT 1',(url,)).fetchone()
     if not old and '/products/' in urlparse(url).path and parse_qs(urlparse(url).query).get('variant'):
         old=conn.execute('SELECT * FROM deals WHERE url=? ORDER BY found_at LIMIT 1',(url,)).fetchone()
+    # A bare Shopify URL may already have the exact variant recorded in its
+    # evidence. Only consolidate that proven alias; never merge sizes by title.
+    selected=parse_qs(urlparse(url).query).get('variant',[''])[0]
+    if '/products/' in urlparse(url).path and selected.isdigit():
+        bare=urlparse(url)._replace(query='',fragment='').geturl()
+        aliases=[r for r in conn.execute('SELECT * FROM deals WHERE url=? AND status!=?',(bare,'merged'))
+                 if re.findall(r'Variante Shopify (\d+):',r['evidence'] or '')==[selected]]
+        if not old and aliases:old=aliases.pop(0)
+        if old:
+            old=dict(old)
+            for alias in aliases:
+                if alias['id']==old['id']:continue
+                old['favorite']=max(old.get('favorite') or 0,alias['favorite'] or 0)
+                old['review_hold']=old.get('review_hold') or alias['review_hold']
+                old['found_at']=min(old['found_at'],alias['found_at'])
+                # Keep the original row and observations for audit/history,
+                # but exclude it from the radar and stop its duplicate watch.
+                conn.execute("UPDATE deals SET status='merged',conditions=? WHERE id=?",('Ficha consolidada con la misma variante exacta: '+url,alias['id']))
+                conn.execute('UPDATE restocks SET active=0 WHERE deal_id=?',(alias['id'],))
     if not old:
         old=next((r for r in conn.execute("SELECT * FROM deals WHERE status='unverified'")
                   if canonical(r['url'] or '')==url and (r['variant'] or '')==variant),None)
@@ -93,6 +113,7 @@ def upsert(conn,deal):
     valid={'id','source','country','store','title','url','image','category','product_type','price','reference_price',
            'currency','discount_pct','is_free','is_sample','kind','score','verdict','reason','found_at'}|set(EXTRA)
     row.update({k:v for k,v in deal.items() if k in valid})
+    if old:row['favorite']=max(old.get('favorite') or 0,row.get('favorite') or 0) if isinstance(old,dict) else row.get('favorite',old['favorite'])
     # A reported false positive is independent evidence. A subsequent cart read
     # or optimistic AI response must not silently clear the unresolved report.
     if deal.get('_release_review_hold'):
@@ -180,7 +201,7 @@ def unpack(row):
 
 
 def query_deals(conn,**f):
-    clauses=['1=1'];params=[]
+    clauses=["status!='merged'"];params=[]
     if f.get('image_only',True):clauses.append("image_status='verified' AND image LIKE '/static/cache/%'")
     # Umbral editorial del radar, incluido en todos los filtros y estadísticas.
     if not f.get('include_below_threshold'):

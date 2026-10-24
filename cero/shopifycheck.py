@@ -1,7 +1,7 @@
 """Datos de la variante Shopify: el formulario inicial puede quedar oculto al cargar JS."""
 import json
 import re
-from urllib.parse import urlparse,parse_qs,urljoin
+from urllib.parse import urlparse,parse_qs,parse_qsl,urljoin,urlencode
 from cero import http
 
 
@@ -55,7 +55,12 @@ def inspect(deal,soup):
     try:
         code,body,_=http.get(f'{p.scheme}://{p.netloc}/products/{match[1]}.js',timeout=8)
         if code!=200:raise ValueError('Catálogo no disponible')
-        apply_variant(deal,json.loads(body),selected)
+        product=json.loads(body)
+        apply_variant(deal,product,selected)
+        if any(str(v.get('id'))==str(selected) for v in product.get('variants') or []):
+            query=[(key,value) for key,value in parse_qsl(p.query,keep_blank_values=True) if key!='variant']
+            query.append(('variant',str(selected)))
+            deal['url']=p._replace(query=urlencode(query)).geturl()
     except Exception:
         deal.update(status='unverified',conditions='No se ha podido contrastar el stock de la variante exacta de Shopify.')
         deal.pop('_cart_eligible',None)
