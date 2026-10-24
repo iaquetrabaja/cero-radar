@@ -34,7 +34,7 @@ app = FastAPI(title='CERO · Radar compartido', root_path=PUBLIC_PREFIX,
 DEAL_FIELDS = {
     'id', 'country', 'store', 'title', 'url', 'image', 'category', 'subcategory',
     'product_type', 'price', 'reference_price', 'reference_source', 'currency',
-    'discount_pct', 'score', 'status', 'availability', 'variant', 'shipping',
+    'discount_pct', 'score', 'ai_score', 'status', 'availability', 'variant', 'shipping',
     'total_price', 'shipping_note', 'reason', 'conditions', 'checked_at',
     'found_at', 'last_verified_at', 'best_price', 'best_discount', 'free_review',
     'free_review_reason', 'verification_level', 'next_review', 'image_status',
@@ -71,7 +71,8 @@ def public_deal(deal):
     result = {key: deal.get(key) for key in DEAL_FIELDS}
     result['buy_url'] = affiliate_url(deal.get('url') or '')
     result['under_review'] = bool(deal.get('review_hold'))
-    result['score_kind'] = 'gemini' if str(deal.get('score_source', '')).startswith('gemini') else 'radar'
+    source = str(deal.get('score_source', ''))
+    result['score_kind'] = 'priority' if source.startswith('priority+gemini') else 'gemini' if source.startswith('gemini') else 'radar'
     for key in ('reason', 'conditions', 'shipping_note', 'free_review_reason'):
         result[key] = public_text(result.get(key))
     if result['under_review']:
