@@ -79,13 +79,21 @@ def _verify(conn,items,label):
         for row in pending:_save(conn,row)
 
 
+def priority_items(conn):
+    # Las ofertas activas no esperan detrás de cientos de indicios sin confirmar.
+    hot=conn.execute("SELECT * FROM deals WHERE status='verified' AND (price=0 OR discount_pct>=80) ORDER BY favorite DESC,checked_at LIMIT 120").fetchall()
+    tracked=conn.execute("SELECT * FROM deals WHERE (favorite=1 OR last_verified_at IS NOT NULL) AND status!='rejected' AND page_status!='not_found' ORDER BY favorite DESC,checked_at LIMIT 60").fetchall()
+    pending=conn.execute("SELECT * FROM deals WHERE last_verified_at IS NULL AND status IN ('candidate','unverified','conditional','blocked') AND page_status!='not_found' ORDER BY checked_at LIMIT 60").fetchall()
+    return list({r['id']:unpack(r) for r in [*hot,*tracked,*pending]}.values())
+
+
 def _run(profile,url):
     c=connect();run_id=None;outcome='completed'
     try:
         cur=c.execute('INSERT INTO runs(profile,started_at,status) VALUES(?,?,?)',(profile,now(),'running'))
         run_id=cur.lastrowid;c.commit()
         with _lock:STATE['run_id']=run_id
-        existing=[unpack(r) for r in c.execute("SELECT * FROM deals WHERE status!='rejected' ORDER BY favorite DESC,checked_at ASC LIMIT 180")]
+        existing=priority_items(c)
         watches=[dict(r) for r in c.execute('SELECT * FROM watches')]
         due_restocks=[unpack(r) for r in c.execute('SELECT d.* FROM deals d JOIN restocks r ON r.deal_id=d.id WHERE r.active=1 AND r.next_check<=?',(now(),))]
         items=due_restocks+existing+watches+[{'url':u} for u in SEEDS]
