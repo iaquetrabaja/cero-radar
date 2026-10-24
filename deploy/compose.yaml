@@ -1,0 +1,37 @@
+services:
+  worker:
+    build: ..
+    image: cero-radar:local
+    restart: unless-stopped
+    command: [python, -m, uvicorn, "cero.api:app", --host, "0.0.0.0", --port, "8765", --no-access-log]
+    env_file: ../.env.server
+    environment:
+      CERO_DATA_DIR: /app/data
+    volumes:
+      - ../data:/app/data
+      - ../cache:/app/cero/static/cache
+    mem_limit: 768m
+    cpus: 0.75
+    logging:
+      options: {max-size: 10m, max-file: "3"}
+  public:
+    image: cero-radar:local
+    restart: unless-stopped
+    environment:
+      CERO_DATA_DIR: /app/data
+      AMAZON_ASSOCIATE_TAG: ${AMAZON_ASSOCIATE_TAG:-}
+    volumes:
+      - ../data:/app/data:ro
+      - ../cache:/app/cero/static/cache:ro
+    networks:
+      default: {}
+      tools:
+        aliases: [cero-public]
+    mem_limit: 256m
+    cpus: 0.25
+    logging:
+      options: {max-size: 10m, max-file: "3"}
+networks:
+  tools:
+    external: true
+    name: lara_default

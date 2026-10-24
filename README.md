@@ -72,6 +72,8 @@ Las consultas descubren URLs; el cero del carrito vacío nunca se convierte en p
 
 ## Funcionar continuamente
 
+Para ofrecer los resultados a una comunidad existe un [visor de solo lectura para servidor](deploy/README.md), separado del rastreador y preparado para situarlo detrás del registro de tu web. No expone el presupuesto ni controles de administración.
+
 Encadena exploraciones con pausa de 60 segundos, vigilancia cada 15 minutos y rastreo profundo diario. Rota fuentes y aplica pausas tras errores. Ajusta la programación en Configuración. **Detener** cancela la pasada y pausa la programación hasta reactivarla.
 
 Inicio de sesión de Windows y reinicio si el proceso termina:
