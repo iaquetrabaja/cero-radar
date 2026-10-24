@@ -25,6 +25,29 @@ def page(price=20,reference=200,availability='InStock',button=True,extra='',offe
 
 
 class ExtractionTests(unittest.TestCase):
+    def test_shopify_parent_url_can_omit_variant_but_offer_cannot(self):
+        parent='https://tienda.es/products/filtro'
+        product={'@type':'Product','name':'Filtro Dyson','url':parent,'offers':[
+            {'@type':'Offer','price':0,'priceCurrency':'EUR','availability':'https://schema.org/InStock','url':parent+'?variant=123'},
+            {'@type':'Offer','price':9,'priceCurrency':'EUR','availability':'https://schema.org/InStock','url':parent+'?variant=456'}]}
+        markup='<html lang="es"><h1>Filtro Dyson</h1><script type="application/ld+json">'+json.dumps(product)+'</script><form action="/cart/add"><input name="id" value="123"><button type="submit">Añadir al carrito</button></form></html>'
+        rows=parse_product(parent+'?variant=123',markup)
+        self.assertEqual([r['price'] for r in rows],[0]);self.assertTrue(rows[0]['_cart_eligible'])
+        self.assertEqual([r['price'] for r in parse_product(parent+'?variant=456',markup)],[9])
+        self.assertEqual(parse_product(parent+'?variant=999',markup),[])
+    def test_ai_prompt_uses_actual_cart_check_not_temporary_hold(self):
+        prompt=analyzer._prompt([{'title':'Filtro','price':0,'status':'conditional','_verification_status':'verified','verification_level':'cart'}])
+        row=json.loads(prompt[prompt.rfind('[{"i"'):])[0]
+        self.assertEqual(row['status'],'verified')
+    def test_price_floor_converts_shopify_cents_without_inflating_discount(self):
+        from cero.frontier import shopify_price_floor
+        product={'title':'Filtro lavable','handle':'filtro','price_min':0,'images':['//tienda.es/filtro.jpg'],
+                 'variants':[{'id':123,'price':0,'compare_at_price':633,'available':True},
+                             {'id':456,'price':200,'compare_at_price':600,'available':True}]}
+        with patch('cero.frontier.http.get',side_effect=[(200,'<a href="/products/filtro">Filtro</a>',''),(200,json.dumps(product),'')]):
+            rows,read=shopify_price_floor({'url':'https://tienda.es','domain':'tienda.es'})
+        self.assertEqual(read,1);self.assertEqual(len(rows),1)
+        self.assertEqual((rows[0]['price'],rows[0]['reference_price']),(0,6.33))
     def test_real_discount(self):
         d=parse_product(URL,page())[0]
         self.assertEqual((d['price'],d['reference_price'],d['discount_pct'],d['status']),(20,200,90,'verified'))
@@ -160,6 +183,13 @@ class FrontierTests(unittest.TestCase):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_spanish_registry_evidence_can_replace_country_in_product_footer(self):
+        from cero.policy import spanish_page
+        conn=Mock();conn.execute.return_value.fetchone.return_value={'origin':'Directorio público · tiendas online de España'}
+        with patch('cero.db.connect',return_value=conn):
+            self.assertTrue(spanish_page('https://comercio-ejemplo.com/products/filtro',BeautifulSoup('<html lang="es"><h1>Filtro</h1></html>','lxml')))
+            self.assertFalse(spanish_page('https://comercio-ejemplo.com/products/filtro',BeautifulSoup('<html lang="it"><h1>Filtro</h1></html>','lxml')))
+        conn.close.assert_called_once()
     def test_product_sku_fragment_survives(self):
         u='https://tienda.es/p#/sku/189168'
         self.assertEqual(canonical(u),u)

@@ -59,6 +59,8 @@ El score del radar expresa interés. Un cero físico comprobado en cesta tiene p
 
 Catálogos públicos WooCommerce y Shopify, páginas de ofertas, schema.org, Amazon por ASIN, el catálogo público de Deporvillage en España y consultas rotativas en varios motores. Incluye miles de combinaciones por tienda y CMS: `0,00 €`, `0,00€`, `0.00€`, botones y porcentajes con distintos signos.
 
+En Shopify combina la paginación del catálogo con la colección ordenada de menor a mayor precio. Así encuentra ceros que quedan fuera de las primeras 250 fichas. Contrasta cada variante con su propio precio, stock e imagen y prueba una cesta individual; los resultados del catálogo son candidatos hasta completar esas comprobaciones.
+
 Las consultas descubren URLs; el cero del carrito vacío nunca se convierte en precio. El panel registra errores y resultados. No hay cobertura total de Internet ni resultados garantizados. No resuelve CAPTCHAs ni compra proxies. Scrapling realiza lecturas HTTP; el motor principal no abre un navegador por producto.
 
 ## Funcionar continuamente

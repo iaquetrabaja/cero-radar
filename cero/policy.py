@@ -58,4 +58,13 @@ def public_url(url):
 def spanish_page(url,soup):
     if allowed(url):return True
     lang=str((soup.html or {}).get('lang','')).lower()
-    return lang.startswith(LANGUAGE) and (COUNTRY!='ES' or bool(re.search(r'España|península|peninsula',soup.get_text(' ',strip=True)))) and allowed(url,True)
+    if not lang.startswith(LANGUAGE) or not allowed(url,True):return False
+    if COUNTRY!='ES' or re.search(r'España|península|peninsula',soup.get_text(' ',strip=True)):return True
+    # A product page need not repeat the country in its footer. Retain the
+    # independent country evidence from the enabled, analysed store registry.
+    from cero.db import connect
+    c=connect()
+    try:
+        row=c.execute("SELECT origin FROM stores WHERE domain=? AND country=? AND enabled=1 AND status='ok'",(host_of(url),COUNTRY)).fetchone()
+        return bool(row and re.search(r'España|localizado en España|Configuración personal',row['origin'] or ''))
+    finally:c.close()

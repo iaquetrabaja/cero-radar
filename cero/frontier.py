@@ -10,6 +10,33 @@ from cero.db import connect,setting,set_setting,now
 from cero.hunter import health,candidate
 from cero.money import discount_pct
 from cero.policy import canonical,allowed,host_of
+from bs4 import BeautifulSoup
+from cero.money import is_sample,is_digital
+
+
+def shopify_price_floor(store):
+    """Find zero variants beyond the first page of the ordinary product feed."""
+    root=store['url'].rstrip('/');host=store['domain'];found=[];read=0
+    code,body,_=http.get(root+'/collections/all?sort_by=price-ascending',timeout=9)
+    if code!=200 or http._blocked(code,body):return [],0
+    handles=[]
+    for a in BeautifulSoup(body,'lxml').select('a[href*="/products/"]'):
+        match=re.search(r'/products/([^/?#]+)',a['href'])
+        if match and match[1] not in handles:handles.append(match[1])
+    for handle in handles[:7]:
+        if is_sample(handle) or is_digital(handle):continue
+        code,body,_=http.get(root+'/products/'+handle+'.js',timeout=8)
+        if code!=200:continue
+        product=json.loads(body);read+=1
+        # The single-product .js endpoint uses cents; products.json uses euros.
+        variants=[{**v,'price':float(v['price'])/100,
+                   'compare_at_price':float(v.get('compare_at_price') or 0)/100}
+                  for v in product.get('variants',[]) if v.get('price') is not None]
+        images=[{'src':urljoin(root,img)} for img in product.get('images',[]) if isinstance(img,str)]
+        rows,_=catalog_rows({'products':[{**product,'variants':variants,'images':images}]},host,'Shopify')
+        found.extend(rows)
+        if product.get('price_min',product.get('price',0))>0:break
+    return found,read
 
 
 def catalog_rows(payload,host,platform):
@@ -58,7 +85,11 @@ def catalog_probe(store,page):
             payload=json.loads(body);rows,n=catalog_rows(payload,host,platform);found.extend(rows);read+=n
             health(host+' · catálogo ampliado','catalogue',url,'ok' if n else 'empty',(datetime.now(timezone.utc)-t).total_seconds(),n,f'{len(rows)} candidatos de precio cero o descuento >=80%')
         except Exception as exc:health(host+' · catálogo ampliado','catalogue',url,'error',0,detail=type(exc).__name__)
-    return found,read
+    if platform=='Shopify':
+        try:
+            cheap,n=shopify_price_floor(store);found.extend(cheap);read+=n
+        except (ValueError,TypeError,KeyError):pass
+    return list({canonical(d['url']):d for d in found}.values()),read
 
 
 def sitemap_probe(store):
@@ -122,7 +153,7 @@ def collect(profile='normal',log=None,on_candidates=None,stop=None):
                 if u in seen or u in checked:continue
                 seen.add(u);fresh.append(d)
             # Los nuevos ceros se verifican antes que descuentos y entradas sin precio.
-            fresh.sort(key=lambda d:(d.get('price')==0,d.get('discount_pct') or 0),reverse=True)
+            fresh.sort(key=lambda d:(d.get('price')==0,d.get('availability')=='in_stock',d.get('discount_pct') or 0),reverse=True)
             fresh=fresh[:8];allrows.extend(fresh)
             if on_candidates and fresh:on_candidates(fresh)
     log(f'Exploración nueva: {len(chosen)} catálogos, {len(maps)} sitemaps, {total} productos leídos, {len(allrows)} candidatos nuevos para comprobar.')

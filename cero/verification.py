@@ -3,7 +3,7 @@ import json
 import re
 from html import unescape
 from difflib import SequenceMatcher
-from urllib.parse import urljoin,urlparse
+from urllib.parse import urljoin,urlparse,parse_qs
 from bs4 import BeautifulSoup
 from scrapling.parser import Selector
 from cero.money import parse_amount, discount_pct, guess_type, is_sample, is_digital
@@ -61,7 +61,13 @@ def base(url,title,price,source):
 def _main_match(n,url,h1):
     link=n.get('url') or (n.get('mainEntityOfPage') or {})
     if isinstance(link,dict):link=link.get('@id','')
-    if link and canonical(urljoin(url,link))!=canonical(url):return False
+    if link and canonical(urljoin(url,link))!=canonical(url):
+        # Shopify identifies the parent Product without ?variant, while the
+        # Offer below must still match the exact requested variant URL.
+        parent=urlparse(canonical(urljoin(url,link)));target=urlparse(canonical(url))
+        if not (parent.netloc==target.netloc and parent.path==target.path
+                and not parent.query and not parent.fragment
+                and set(parse_qs(target.query))=={'variant'}):return False
     title=str(n.get('name',''))
     if h1 and title:
         a=set(re.findall(r'\w+',h1.lower()));b=set(re.findall(r'\w+',title.lower()))
@@ -135,7 +141,7 @@ def parse_product(url,html):
                     if ref and ref>price:d['reference_price']=ref;d['reference_source']='PVP tachado de la tienda'
                 records.append(d)
     # No buscar CTA en tarjetas de productos relacionados.
-    button=soup.select_one('#product-addtocart-button,form.cart button.single_add_to_cart_button,form.cart input[type="submit"],form.ec_add_to_cart_form input[type="submit"],button[data-test="pdp-add-to-cart"],button[data-test="add-to-cart-button"],button[data-testid="add-to-cart-button"],.product-add-to-cart button.add-to-cart,.product-actions button[data-button-action="add-to-cart"],form[action*="cart"] button[name="add"],.product-form__submit')
+    button=soup.select_one('#product-addtocart-button,form.cart button.single_add_to_cart_button,form.cart input[type="submit"],form.ec_add_to_cart_form input[type="submit"],button[data-test="pdp-add-to-cart"],button[data-test="add-to-cart-button"],button[data-testid="add-to-cart-button"],.product-add-to-cart button.add-to-cart,.product-actions button[data-button-action="add-to-cart"],form[action*="cart"] button[name="add"],form[action*="cart/add"] button[type="submit"],.product-form__submit')
     purchasable=button is not None and not button.has_attr('disabled') and button.get('aria-disabled')!='true' and 'disabled' not in (button.get('class') or [])
     styles=' '.join(s.get_text() for s in soup.select('style'))
     # Algunos regalos internos publican price=0 pero ocultan expresamente la compra.
