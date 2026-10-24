@@ -25,6 +25,14 @@ def page(price=20,reference=200,availability='InStock',button=True,extra='',offe
 
 
 class ExtractionTests(unittest.TestCase):
+    def test_large_storefront_does_not_cut_off_the_product_before_three_megabytes(self):
+        from cero import http
+        markup='<!--'+'x'*3_100_000+'-->'+page(price=0,reference=12)
+        response=Mock(status=200,body=markup.encode('utf8'),url=URL)
+        with patch('cero.http.Fetcher.get',return_value=response),patch('cero.http.public_url',return_value=True),patch('cero.http._pause'):
+            code,body,final=http.get(URL)
+        rows=parse_product(final,body)
+        self.assertEqual(code,200);self.assertEqual(len(rows),1);self.assertEqual(rows[0]['price'],0)
     def test_shopify_parent_url_can_omit_variant_but_offer_cannot(self):
         parent='https://tienda.es/products/filtro'
         product={'@type':'Product','name':'Filtro Dyson','url':parent,'offers':[
@@ -221,6 +229,15 @@ class FrontierTests(unittest.TestCase):
 
 
 class StockFinderTests(unittest.TestCase):
+    def test_available_zero_probe_uses_stock_filters_and_exact_available_variant(self):
+        from cero.stockfinder import probe
+        product={'id':1,'handle':'filtro','title':'Filtro','images':[{'src':IMAGE}],'variants':[
+            {'id':123,'price':'0.00','available':True},{'id':124,'price':'0.00','available':False}]}
+        replies=[(200,json.dumps({'products':[product]}),''),(200,'<main></main>','')]
+        with patch('cero.stockfinder.http.get',side_effect=replies) as get,patch('cero.stockfinder.health'):
+            rows,_,_=probe({'domain':'tienda.es','url':'https://tienda.es','platform':'Shopify'},availability='in_stock')
+        self.assertEqual([r['url'] for r in rows],['https://tienda.es/products/filtro?variant=123'])
+        self.assertIn('filter.v.availability=1',get.call_args_list[1].args[0])
     def test_full_pages_advance_beyond_four_and_ignore_servers_repeating_a_page(self):
         from cero.stockfinder import probe
         products=[{'id':i,'name':'Pieza','permalink':URL+str(i),'is_in_stock':False,'prices':{'price':'0'},'images':[{'src':IMAGE}]} for i in range(100)]
@@ -383,6 +400,15 @@ class PersistenceTests(unittest.TestCase):
         self.c.close();db.DB_PATH=self.original;self.tmp.cleanup()
     def put(self,**extra):
         d={'url':URL,'title':'Robot aspirador de prueba','price':0,'availability':'out_of_stock','status':'expired','page_status':'ok','image':'/static/cache/'+'a'*64+'.webp','image_status':'verified','free_review':'accepted'};d.update(extra);db.upsert(self.c,d);self.c.commit()
+    def test_cart_rejection_cannot_be_overruled_by_page_stock_or_positive_ai(self):
+        from cero.hunter import check_url
+        proof={'purchase_rejected':True,'reason':'Lo siento, este producto no se puede comprar.','evidence':'Lo siento, este producto no se puede comprar.','item_at_zero':False,'checkout_submitted':False}
+        self.c.execute('INSERT INTO audits VALUES(?,?,?)',(URL,json.dumps(proof),db.now()));self.c.commit()
+        with patch('cero.hunter.http.get',return_value=(200,page(price=0),URL)):
+            d=check_url(URL)
+        self.assertEqual(d['status'],'rejected')
+        analyzer._apply(d,{'score':100,'free_assessment':'accepted'})
+        self.assertEqual((d['status'],d['score']),('rejected',0))
     def test_reported_false_positive_cannot_be_reconfirmed_by_fresh_cart(self):
         self.put(status='verified',availability='in_stock',review_hold='Incidencia de compra pendiente')
         fresh={'url':URL,'title':'Robot aspirador de prueba','price':0,'status':'verified','availability':'in_stock','free_review':'accepted','score':100,'review_hold':''}

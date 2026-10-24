@@ -14,6 +14,8 @@ def internal_product_reason(url,title='',tags=None,description=''):
         return 'Ficha interna oculta de una aplicación de cajas regalo (qegiftboxhide), sin producto independiente identificado.'
     if re.fullmatch(r'tienda\s+(?:on\s*line|virtual)(?:\s+operativa)?',str(title or '').strip(),re.I):
         return 'Página informativa de la tienda publicada como producto; no identifica un artículo físico gratuito.'
+    if re.fullmatch(r'(?:(?:primera|segunda|tercera)\s+)?devoluci[oó]n\s+(?:de\s+)?(?:pedido|producto)',str(title or '').strip(),re.I):
+        return 'Servicio de devolución de un pedido: no es un producto físico gratuito independiente.'
     return ''
 
 

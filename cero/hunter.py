@@ -22,6 +22,7 @@ SEEDS=['https://www.mediamarkt.es/es/product/_secador-cecotec-ionicare-dryandker
 if COUNTRY!='ES':SEEDS=[]
 PRIORITY=['MediaMarkt','Amazon','Deporvillage','PcComponentes','Decathlon','El Corte Inglés','Carrefour','Worten','Sprinter','Druni','Primor','Lidl','Cecotec','Fnac','Zalando','Mango','Miravia','Forum Sport']
 SALE_PAGES=[('MediaMarkt · ofertas','https://www.mediamarkt.es/es/campaign/ofertas'),
+ ('Dreame España · paga solo el envío','https://es.dreametech.com/collections/paga-solo-el-envio'),
  ('PcComponentes · ofertas','https://www.pccomponentes.com/ofertas-especiales'),
  ('Deporvillage · outlet','https://www.deporvillage.com/outlet'),
  ('Druni · outlet','https://www.druni.es/outlet'),('Primor · outlet','https://www.primor.eu/es_es/outlet'),
@@ -132,6 +133,10 @@ def check_url(url,previous=None):
         audit=c.execute('SELECT payload,checked_at FROM audits WHERE url=?',(canonical(final),)).fetchone()
         if audit and d.get('price')==0 and (datetime.now(timezone.utc)-datetime.fromisoformat(audit['checked_at'])).total_seconds()<7200:
             proof=json.loads(audit['payload'])
+            if proof.get('purchase_rejected'):
+                reason=proof.get('reason') or 'La tienda rechaza añadir el producto a la cesta.'
+                d.update(status='rejected',free_review='rejected',free_review_reason=reason,conditions=reason,score=0)
+                d['evidence'].append(proof.get('evidence') or reason);d.pop('_cart_eligible',None)
             if d.get('_cart_eligible') and proof.get('item_at_zero') and proof.get('needs_shipping') is True and not proof.get('errors'):
                 d['verification_level']='cart';d['status']='verified';d['delivery_status']='shipping_required';d['confidence']=95
                 d['conditions']='Producto añadido por separado a una cesta anónima a 0 EUR. Es un artículo con envío; los gastos de transporte se confirman en la tienda.'
@@ -277,6 +282,11 @@ def discovery_jobs(conn,profile):
         q=exhausted_queries[(rc+i)%len(exhausted_queries)]
         for engine in (motors[(rc+i)%len(motors)],motors[(rc+i+2)%len(motors)]):jobs.append(('search',engine,q,''))
     set_setting(conn,'restock_query_cursor',(rc+rn)%len(exhausted_queries));conn.commit()
+    from cero.footprints import promotion_queries
+    promotions=promotion_queries();pc=setting(conn,'promotion_query_cursor',0)
+    for i in range(2):
+        jobs.append(('search',motors[(pc+i)%len(motors)],promotions[(pc+i)%len(promotions)],''))
+    set_setting(conn,'promotion_query_cursor',(pc+2)%max(len(promotions),len(motors)));conn.commit()
     # Las fuentes con fallos repetidos descansan, sin bloquear las demás.
     cooldown={r['name'] for r in conn.execute('SELECT name FROM source_health WHERE next_retry>? AND failures>=2',(now(),))}
     return [j for j in jobs if not (j[0]=='listing' and j[1] in cooldown or j[0]=='search' and 'Buscador · '+j[1] in cooldown)]

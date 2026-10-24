@@ -26,6 +26,16 @@ def restock_queries(domains=()):
     return [q.replace('€',symbol).replace('EUR',PROFILE['currency']) for q in dict.fromkeys(queries)]
 
 
+def promotion_queries():
+    terms={'es':['paga solo el envío','paga sólo el envío','gratis pagando envío','paga únicamente el envío'],
+           'en':['just pay shipping','free product pay shipping'],
+           'fr':['payez uniquement les frais de port'],
+           'de':['nur Versandkosten bezahlen'],
+           'pt':['pague apenas o envio'],
+           'it':['paga solo la spedizione']}.get(LANGUAGE,['just pay shipping'])
+    return [f'"{term}" "{PROFILE["name"]}" -muestra -muestras -sample -samples -inurl:cart -pdf' for term in terms]
+
+
 def generate(domains=()):
     actions={'en':['"add to cart"','"add to basket"','"buy"'],'fr':['"ajouter au panier"','"acheter"'],'de':['"in den Warenkorb"','"kaufen"'],'it':['"aggiungi al carrello"','"comprare"'],'pt':['"adicionar ao carrinho"','"comprar"']}.get(LANGUAGE,ACTIONS)
     general=[f'{price} {action} site:.es {EXCLUDE}' for price in ZERO for action in actions]

@@ -66,6 +66,8 @@ En Shopify combina la paginación del catálogo con la colección ordenada de me
 
 Una pasada dedicada busca **ceros sin stock**: filtros públicos de disponibilidad y precio, páginas sucesivas del catálogo y variantes agotadas. Cada tienda conserva su posición, también más allá de la página 4. En WooCommerce se consulta hasta una unidad monetaria mínima y se exige cero exacto después, porque algunas tiendas ignoran el filtro `max_price=0`. Los filtros pueden ser ignorados por la tienda: siempre se contrasta la ficha y la variante, incluso si el agotado ya no tiene formulario de compra. Se alternan productos antes de repetir tallas. Los hallazgos con foto y ficha válida pasan por Gemini y entran en vigilancia de 12 horas; no se anuncian como disponibles.
 
+Antes de esa pasada se priorizan **ceros con stock y fotografía**, con filtros y posiciones de catálogo independientes. Las campañas públicas «paga solo el envío», como la colección oficial de Dreame España, se incluyen entre las fuentes. El cero y la tarifa se verifican por separado; una condición de cantidad se conserva en los detalles. El rechazo expreso al añadir un artículo a la cesta prevalece sobre el botón de compra, el stock del catálogo y la valoración de IA.
+
 Las consultas descubren URLs; el cero del carrito vacío nunca se convierte en precio. El panel registra errores y resultados. No hay cobertura total de Internet ni resultados garantizados. No resuelve CAPTCHAs ni compra proxies. Scrapling realiza lecturas HTTP; el motor principal no abre un navegador por producto.
 
 ## Funcionar continuamente

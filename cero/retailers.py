@@ -5,6 +5,7 @@ Decathlon | bicicleta eléctrica | https://www.decathlon.es/es/search?Ntt={q}
 Deporvillage | bicicleta eléctrica;maillot | https://www.deporvillage.com/catalogsearch/result/?q={q}
 PcComponentes | robot aspirador;bicicleta eléctrica | https://www.pccomponentes.com/buscar/?query={q}
 MediaMarkt | robot aspirador;televisor | https://www.mediamarkt.es/es/search.html?query={q}
+Dreame España | robot aspirador;accesorios | https://es.dreametech.com/search?type=product&q={q}
 El Corte Inglés | bicicleta eléctrica;robot aspirador | https://www.elcorteingles.es/search/?s={q}
 Hipercor | robot aspirador | https://www.hipercor.es/search/?s={q}
 Fnac | robot aspirador;auriculares | https://www.fnac.es/SearchResult/ResultList.aspx?Search={q}&sft=1&sa=0

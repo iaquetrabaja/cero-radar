@@ -38,7 +38,9 @@ def get(url,headers=None,timeout=15):
             location=response.headers.get('location') or response.headers.get('Location')
             if not location:return status,text,url
             url=urljoin(url,location);continue
-        return status,text[:3_000_000],str(response.url)
+        # Some storefronts place the product after >3 MB of navigation/scripts
+        # (Dreame Spain ~4 MB). Keep a bound without cutting off the actual PDP.
+        return status,text[:6_000_000],str(response.url)
     raise ValueError('Demasiadas redirecciones')
 
 

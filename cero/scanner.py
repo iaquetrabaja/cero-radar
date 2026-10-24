@@ -57,7 +57,8 @@ def _save(conn,d):
 def _verify(conn,items,label):
     # Evita duplicar fichas por precio, título, origen o parámetros de seguimiento.
     rest={r['url'] for r in conn.execute('SELECT url FROM restocks WHERE active=1 AND next_check>?',(now(),))}
-    unique={canonical(d['url']):d for d in items if STATE['profile']=='single' or canonical(d['url']) not in rest}
+    unique={canonical(d['url']):d for d in items if STATE['profile']=='single' or canonical(d['url']) not in rest
+            or d.get('availability') in ('in_stock','preorder')}
     total=len(unique);_progress(label,0,total);pending=[]
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures={pool.submit(check_url,d['url'],d):d for d in unique.values()}
@@ -108,6 +109,8 @@ def _run(profile,url):
             return
         if profile not in ('watch','single'):
             from cero.stockfinder import collect as exhausted
+            _log('Priorizando productos a cero que declaran stock y fotografía propia.')
+            exhausted(profile,_log,lambda rows:_verify(c,rows,'new_free_products'),_stop.is_set,availability='in_stock')
             _log('Buscando ceros agotados en catálogos y variantes, con paginación independiente.')
             exhausted(profile,_log,lambda rows:_verify(c,rows,'new_restocks'),_stop.is_set)
             from cero.signals import collect as community

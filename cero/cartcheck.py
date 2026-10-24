@@ -108,10 +108,18 @@ def check_free_cart(deal,soup):
             if button and str(button.get('value','')).isdigit():
                 pid=int(button['value']);r=session.get(root+'/wp-json/wc/store/v1/cart',timeout=12,allow_redirects=False)
                 token=r.headers.get('Cart-Token') or r.headers.get('cart-token')
-                if not token:return None
+                if not token:
+                    from cero.woocheck import woo_classic_rejection
+                    rejection=woo_classic_rejection(session,deal,soup,pid)
+                    if rejection:proof.update(rejection);return _save(proof)
+                    return None
                 a=session.post(root+'/wp-json/wc/store/v1/cart/add-item',headers={'Cart-Token':token,'Accept':'application/json'},json={'id':pid,'quantity':1},timeout=12,allow_redirects=False)
                 proof['add_status']=a.status_code
-                if a.status_code not in (200,201):return _save(proof)
+                if a.status_code not in (200,201):
+                    from cero.woocheck import woo_classic_rejection
+                    rejection=woo_classic_rejection(session,deal,soup,pid)
+                    if rejection:proof.update(rejection)
+                    return _save(proof)
                 cart=a.json();items=cart.get('items',[]);matched=[x for x in items if x.get('id')==pid]
                 if len(matched)==1 and len(items)==1:
                     item=matched[0];totals=item.get('totals') or {}
