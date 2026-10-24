@@ -106,14 +106,18 @@ def _run(profile,url):
             if api_candidates:_verify(c,api_candidates,'catalogue')
             from cero.registry import import_catalog,analyze_catalog
             import_catalog()
-            registry_candidates=analyze_catalog(600 if profile=='deep' else 35,_log,_stop.is_set)
-            if registry_candidates:
-                from cero.policy import host_of
-                counts={};fair=[]
-                for d in sorted(registry_candidates,key=lambda d:(d.get('price')==0,d.get('discount_pct') or 0),reverse=True):
-                    host=host_of(d['url']);counts[host]=counts.get(host,0)+1
-                    if counts[host]<=5:fair.append(d)
-                _verify(c,fair[:150 if profile=='deep' else 80],'verifying')
+            from cero.policy import host_of
+            catalog_seen=set();catalog_counts={};catalog_limit=150 if profile=='deep' else 80
+            def live_catalog(found):
+                if _stop.is_set():return
+                selected=[]
+                for d in sorted(found,key=lambda d:(d.get('price')==0,d.get('discount_pct') or 0),reverse=True):
+                    key=canonical(d['url']);host=host_of(key)
+                    if key in catalog_seen or len(catalog_seen)>=catalog_limit or catalog_counts.get(host,0)>=5:continue
+                    catalog_seen.add(key);catalog_counts[host]=catalog_counts.get(host,0)+1;selected.append(d)
+                if selected:_verify(c,selected,'verifying')
+            analyze_catalog(600 if profile=='deep' else 35,_log,_stop.is_set,
+                            lambda done,total:_progress('coverage',done,total),live_catalog)
             jobs=discovery_jobs(c,profile);_log(f'Explorando {len(jobs)} fuentes: tiendas, catálogos y buscadores.');_progress('discovery',0,len(jobs))
             candidates=[];urls=[]
             with ThreadPoolExecutor(max_workers=8) as pool:

@@ -101,10 +101,11 @@ def analyze(store):
     return products,links,status
 
 
-def analyze_catalog(limit=600,log=None,stop=None):
+def analyze_catalog(limit=600,log=None,stop=None,progress=None,on_candidates=None):
     log=log or print;c=connect()
     stores=[dict(r) for r in c.execute('SELECT * FROM stores WHERE enabled=1 AND (next_check IS NULL OR next_check<=?) ORDER BY checked_at IS NOT NULL,checked_at LIMIT ?',(now(),limit))];c.close()
     log(f'Cobertura: comprobando {len(stores)} tiendas con dominio único.');candidates=[]
+    if progress:progress(0,len(stores))
     from cero.hunter import candidate
     with ThreadPoolExecutor(max_workers=10) as pool:
         futures=[pool.submit(analyze,s) for s in stores]
@@ -114,6 +115,8 @@ def analyze_catalog(limit=600,log=None,stop=None):
                 break
             try:products,links,status=f.result()
             except Exception:continue
-            candidates.extend(d for d in products if candidate(d))
+            found=[d for d in products if candidate(d)];candidates.extend(found)
+            if on_candidates and found:on_candidates(found)
+            if progress:progress(i,len(stores))
             if i%25==0 or i==len(stores):log(f'Cobertura: {i}/{len(stores)} tiendas analizadas en esta pasada.')
     return candidates
