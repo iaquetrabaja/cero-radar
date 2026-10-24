@@ -123,6 +123,22 @@ class PublicRadarTests(unittest.TestCase):
             self.assertEqual(self.client.get('/api/meta').status_code,503)
         self.assertFalse(missing.exists())
 
+    def test_worker_keeps_wal_available_for_readonly_viewer_while_idle(self):
+        from cero import api
+        def writer_connection():
+            conn=sqlite3.connect(self.database,check_same_thread=False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute("INSERT OR REPLACE INTO settings VALUES('keepalive-test','true')")
+            conn.commit()
+            return conn
+        with patch.object(api,'connect',side_effect=writer_connection),patch.object(api,'boot'),patch.object(api,'shutdown'):
+            with TestClient(api.app):
+                for _ in range(3):
+                    self.assertTrue(Path(str(self.database)+'-shm').is_file())
+                    self.assertTrue(Path(str(self.database)+'-wal').is_file())
+                    self.assertEqual(self.client.get('/api/meta').status_code,200)
+                self.assertTrue(Path(str(self.database)+'-shm').is_file())
+
 
 if __name__=='__main__':
     unittest.main()

@@ -15,7 +15,15 @@ STATIC=Path(__file__).resolve().parent/'static'
 
 @asynccontextmanager
 async def lifespan(app):
-    boot();yield;shutdown()
+    # Keep WAL sidecars available for the separate viewer's read-only mount,
+    # including idle periods between scans. No transaction is kept open.
+    database=connect()
+    try:
+        boot()
+        yield
+    finally:
+        shutdown()
+        database.close()
 
 app=FastAPI(title='CERO · Radar de chollos',lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost','testserver','[::1]'])
