@@ -6,6 +6,12 @@ from cero import http
 
 
 def apply_variant(deal,product,variant_id):
+    from cero.freecheck import internal_product_reason
+    reason=internal_product_reason(deal.get('url',''),product.get('title',''),product.get('tags'),product.get('description',''))
+    if reason:
+        deal.update(status='rejected',free_review='rejected',free_review_reason=reason,conditions=reason,score=0)
+        deal.setdefault('evidence',[]).extend([reason,'Etiquetas del catálogo: '+', '.join(product.get('tags') or [])])
+        deal.pop('_cart_eligible',None);return
     variants=product.get('variants') or []
     variant=next((v for v in variants if str(v.get('id'))==str(variant_id)),None)
     if not variant:

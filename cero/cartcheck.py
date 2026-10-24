@@ -7,6 +7,41 @@ from urllib.parse import urlparse,urljoin,parse_qs
 from curl_cffi import requests
 from cero.policy import public_url,canonical
 from cero.db import connect,now
+from cero.market import COUNTRY,CURRENCY
+
+
+def shopify_cart_evidence(cart,variant):
+    items=cart.get('items',[])
+    if len(items)!=1 or cart.get('item_count')!=1 or cart.get('currency')!=CURRENCY:return {}
+    item=items[0]
+    if str(item.get('variant_id') or item.get('id'))!=str(variant) or item.get('quantity')!=1:return {}
+    unit=item.get('final_price',item.get('price'));line=item.get('final_line_price',item.get('line_price'))
+    return {'item_at_zero':unit==0 and line==0 and cart.get('total_price')==0,
+            'needs_shipping':item.get('requires_shipping'),'total_price':cart.get('total_price'),
+            'quantity':item['quantity'],'currency':cart['currency'],
+            'item_title':item.get('product_title') or item.get('title'),'platform':'Shopify'}
+
+
+def shopify_shipping_quote(session,root):
+    # Public test locality, never the user's address. Other markets need their
+    # own validated destination instead of inheriting a Spanish shipping quote.
+    if COUNTRY!='ES':return {}
+    try:
+        r=session.get(root+'/cart/shipping_rates.json',params={
+            'shipping_address[country]':'Spain','shipping_address[province]':'Madrid',
+            'shipping_address[zip]':'28001'},timeout=12,allow_redirects=False)
+        if r.status_code!=200:return {'shipping_check':'unavailable'}
+        rates=r.json().get('shipping_rates',[]);valid=[]
+        for rate in rates:
+            amount=parse_amount(str(rate.get('price','')))
+            if amount is not None and rate.get('currency',CURRENCY)==CURRENCY:
+                valid.append({'name':rate.get('name',''),'price':amount})
+        if not valid:return {'shipping_check':'no_rates'}
+        best=min(valid,key=lambda x:x['price'])
+        return {'shipping_check':'quoted','shipping_rates':valid,'shipping_quote_eur':best['price'],
+                'shipping_quote_note':f"Cotización de prueba para CP 28001 (Madrid), {best['name']}. Otros destinos y fechas pueden variar.",
+                'destination_confirmed':False}
+    except Exception:return {'shipping_check':'unavailable'}
 
 
 def check_free_cart(deal,soup):
@@ -18,10 +53,11 @@ def check_free_cart(deal,soup):
         old=c.execute('SELECT payload,checked_at FROM audits WHERE url=?',(canonical(deal['url']),)).fetchone()
         if old:
             from datetime import datetime,timezone
-            if (datetime.now(timezone.utc)-datetime.fromisoformat(old['checked_at'])).total_seconds()<7200:
-                return json.loads(old['payload'])
+            saved=json.loads(old['payload'])
+            if (datetime.now(timezone.utc)-datetime.fromisoformat(old['checked_at'])).total_seconds()<7200 and (saved.get('platform')!='Shopify' or saved.get('audit_version',0)>=2):
+                return saved
     finally:c.close()
-    proof={'url':deal['url'],'checked_at':now(),'checkout_submitted':False,'item_at_zero':False}
+    proof={'url':deal['url'],'checked_at':now(),'checkout_submitted':False,'item_at_zero':False,'audit_version':2}
     try:
         with requests.Session(impersonate='chrome') as session:
             easy=soup.select_one('form.ec_add_to_cart_form')
@@ -60,12 +96,13 @@ def check_free_cart(deal,soup):
                 proof['add_status']=response.status_code
                 if response.status_code!=200:return _save(proof)
                 cart=session.get(root+'/cart.js',headers={'Accept':'application/json'},timeout=12,allow_redirects=False).json()
-                matching=[x for x in cart.get('items',[]) if str(x.get('variant_id') or x.get('id'))==str(variant)]
-                if len(matching)==1 and len(cart.get('items',[]))==1:
-                    item=matching[0]
-                    proof.update(item_at_zero=item.get('final_line_price',item.get('line_price'))==0,
-                       needs_shipping=item.get('requires_shipping'),total_price=cart.get('total_price'),
-                       item_title=item.get('product_title') or item.get('title'),platform='Shopify')
+                proof.update(shopify_cart_evidence(cart,variant))
+                if proof.get('item_at_zero') and proof.get('needs_shipping'):
+                    proof.update(shopify_shipping_quote(session,root))
+                    latest=session.get(root+'/cart.js',headers={'Accept':'application/json'},timeout=12,allow_redirects=False).json()
+                    current=shopify_cart_evidence(latest,variant)
+                    proof['item_at_zero']=False
+                    proof.update(current)
                 return _save(proof)
             button=soup.select_one('form.cart [name="add-to-cart"]')
             if button and str(button.get('value','')).isdigit():

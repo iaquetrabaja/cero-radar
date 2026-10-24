@@ -48,6 +48,9 @@ En **Fuentes de rastreo → Añadir una tienda** registra comercios sin modifica
 - Calas, sillines y frenos en **Deporte → Ciclismo**, con tipos propios.
 - Imagen real descargada y validada obligatoria; las fichas sin foto quedan retenidas.
 - **0 € con portes sí es válido**. Precio, gastos y total se separan; destino o gastos desconocidos se indican como pendientes.
+- Los ceros comunicados como posibles falsos positivos se conservan en revisión. Repetir la cesta o recibir una valoración favorable de Gemini no elimina una incidencia sin resolver ni activa avisos.
+- Se excluyen las fichas internas de aplicaciones promocionales, como los clones BOGOS, las cajas ocultas de regalo y las páginas informativas publicadas como productos. El control se aplica al catálogo y a la ficha antes de probar la cesta.
+- En Shopify se comprueba una sola unidad, variante y moneda exactas, precio unitario y total. Para España se intenta cotizar el envío al CP público de prueba 28001 y releer la cesta; sin tarifa válida la compra queda pendiente. Una cotización no implica que la tienda haya aceptado un pedido.
 - Ceros realmente agotados permanecen tanto en el radar general como en Ceros sin stock, con prioridad menor, y se revisan **cada 12 h**. Un 404, una página vacía con HTTP 200 o un precio interno no cuenta como reposición comprobada.
 - Las ofertas interesantes se conservan aunque falle una lectura o cambie el precio. El radar distingue activas, agotadas, pendientes de renovar y finalizadas, y muestra el mejor precio observado.
 

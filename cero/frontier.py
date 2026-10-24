@@ -43,6 +43,8 @@ def catalog_rows(payload,host,platform):
     items=payload if isinstance(payload,list) else payload.get('products',[])
     out=[]
     for p in items:
+        from cero.freecheck import internal_product_reason
+        if internal_product_reason(p.get('permalink') or '/products/'+p.get('handle',''),p.get('title') or p.get('name',''),p.get('tags') if platform=='Shopify' else [],p.get('description') or ''):continue
         if platform=='WooCommerce':
             values=p.get('prices') or {};minor=int(values.get('currency_minor_unit',2))
             try:price=int(values['price'])/10**minor;ref=int(values.get('regular_price') or 0)/10**minor

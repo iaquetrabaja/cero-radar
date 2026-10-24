@@ -39,6 +39,10 @@ class ExtractionTests(unittest.TestCase):
         prompt=analyzer._prompt([{'title':'Filtro','price':0,'status':'conditional','_verification_status':'verified','verification_level':'cart'}])
         row=json.loads(prompt[prompt.rfind('[{"i"'):])[0]
         self.assertEqual(row['status'],'verified')
+    def test_internal_report_is_not_sent_as_merchant_condition(self):
+        prompt=analyzer._prompt([{'price':0,'status':'conditional','review_hold':'Aviso interno','conditions':'Aviso interno'}])
+        row=json.loads(prompt[prompt.rfind('[{"i"'):])[0]
+        self.assertEqual(row['conditions'],'');self.assertEqual(row['review_hold'],'Aviso interno')
     def test_price_floor_converts_shopify_cents_without_inflating_discount(self):
         from cero.frontier import shopify_price_floor
         product={'title':'Filtro lavable','handle':'filtro','price_min':0,'images':['//tienda.es/filtro.jpg'],
@@ -143,6 +147,22 @@ class AmazonDiscoveryTests(unittest.TestCase):
 
 
 class ShopifyVariantTests(unittest.TestCase):
+    def test_cart_zero_requires_exactly_one_unit_and_correct_currency(self):
+        from cero.cartcheck import shopify_cart_evidence
+        cart={'currency':'EUR','item_count':1,'total_price':0,'items':[{'variant_id':123,'quantity':1,'price':0,'final_price':0,'line_price':0,'final_line_price':0,'requires_shipping':True}]}
+        self.assertTrue(shopify_cart_evidence(cart,'123')['item_at_zero'])
+        self.assertEqual(shopify_cart_evidence(cart,'456'),{})
+        cart['items'][0]['quantity']=2
+        self.assertEqual(shopify_cart_evidence(cart,'123'),{})
+        cart['items'][0]['quantity']=1;cart['currency']='USD'
+        self.assertEqual(shopify_cart_evidence(cart,'123'),{})
+    def test_no_shipping_rates_is_not_free_shipping(self):
+        from cero.cartcheck import shopify_shipping_quote
+        session=Mock();session.get.return_value.status_code=200
+        session.get.return_value.json.return_value={'shipping_rates':[]}
+        with patch('cero.cartcheck.COUNTRY','ES'):
+            proof=shopify_shipping_quote(session,'https://tienda.es')
+        self.assertEqual(proof['shipping_check'],'no_rates');self.assertNotIn('shipping_quote_eur',proof)
     def test_stock_overrules_hidden_html_cart_form(self):
         from cero.shopifycheck import apply_variant
         d={'price':0,'status':'verified','availability':'in_stock','image':IMAGE,'_cart_eligible':True}
@@ -218,6 +238,18 @@ class PolicyTests(unittest.TestCase):
 
 
 class FreeReviewTests(unittest.TestCase):
+    def test_internal_promotion_clones_are_not_independent_free_products(self):
+        from cero.freecheck import internal_product_reason
+        self.assertTrue(internal_product_reason('https://tienda.es/products/crema-sca_clone_freegift','Crema'))
+        self.assertTrue(internal_product_reason(URL,'Gift Box',['qegiftboxhide']))
+        self.assertTrue(internal_product_reason(URL,'Crema',['bogos-gift']))
+        self.assertTrue(internal_product_reason(URL,'TIENDA ON LINE'))
+        self.assertFalse(internal_product_reason(URL,'Crema',['cosmetica'],'La tienda utiliza BOGOS para algunas promociones.'))
+    def test_internal_gift_metadata_overrules_cart_eligible_html(self):
+        from cero.shopifycheck import apply_variant
+        d={'url':URL,'price':0,'status':'verified','_cart_eligible':True,'evidence':[]}
+        apply_variant(d,{'title':'Gift Box','tags':['qegiftboxhide'],'variants':[{'id':123,'price':0,'available':True}]},'123')
+        self.assertEqual((d['status'],d['free_review']),('rejected','rejected'));self.assertNotIn('_cart_eligible',d)
     def test_phone_sale_rejected_before_cart(self):
         from cero.freecheck import inspect
         d={'title':'Escáner Spectrum','price':0,'url':URL,'status':'candidate','evidence':[],'_cart_eligible':True}
@@ -294,6 +326,14 @@ class PersistenceTests(unittest.TestCase):
         self.c.close();db.DB_PATH=self.original;self.tmp.cleanup()
     def put(self,**extra):
         d={'url':URL,'title':'Robot aspirador de prueba','price':0,'availability':'out_of_stock','status':'expired','page_status':'ok','image':'/static/cache/'+'a'*64+'.webp','image_status':'verified','free_review':'accepted'};d.update(extra);db.upsert(self.c,d);self.c.commit()
+    def test_reported_false_positive_cannot_be_reconfirmed_by_fresh_cart(self):
+        self.put(status='verified',availability='in_stock',review_hold='Incidencia de compra pendiente')
+        fresh={'url':URL,'title':'Robot aspirador de prueba','price':0,'status':'verified','availability':'in_stock','free_review':'accepted','score':100,'review_hold':''}
+        db.upsert(self.c,fresh);self.c.commit()
+        row=self.c.execute('SELECT * FROM deals').fetchone()
+        self.assertEqual((row['status'],row['free_review'],row['review_hold']),('conditional','uncertain','Incidencia de compra pendiente'))
+        self.assertLessEqual(row['score'],40);self.assertEqual(fresh['status'],'conditional')
+        self.assertEqual(db.query_deals(self.c,status='verified'),[])
     def test_zero_out_of_stock_due_in_twelve_hours(self):
         self.put();r=self.c.execute('SELECT * FROM restocks').fetchone()
         self.assertEqual((datetime.fromisoformat(r['next_check'])-datetime.fromisoformat(r['last_checked'])).total_seconds(),43200)

@@ -146,8 +146,11 @@ def check_url(url,previous=None):
                 if proof.get('shipping_quote_eur') is not None:
                     d['shipping']=proof['shipping_quote_eur'];d['total_price']=round(d['price']+d['shipping'],2)
                     d['shipping_note']=proof.get('shipping_quote_note','Portes observados para un destino de prueba; pueden variar.')
-                    d['conditions']='Precio cero comprobado hasta la pantalla previa al pago, sin otro producto. '+d['shipping_note']
-                    d['evidence'].append(f"Pantalla previa al pago: artículo 0 EUR; envío y total {d['shipping']:.2f} EUR. {d['shipping_note']}")
+                    d['conditions']='Producto a cero en cesta individual, con tarifa de entrega cotizada. '+d['shipping_note']
+                    d['evidence'].append(f"Cesta: artículo 0 EUR; tarifa de envío cotizada {d['shipping']:.2f} EUR. {d['shipping_note']}")
+                elif proof.get('platform')=='Shopify':
+                    d.update(status='conditional',delivery_status='shipping_unconfirmed',confidence=50,
+                             conditions='Precio cero observado en cesta, pero falta una tarifa de entrega válida para el destino de prueba. No se confirma la compra.')
             if d.get('availability')!='out_of_stock' and proof.get('item_at_zero') and proof.get('checkout_has_order_review') and proof.get('needs_shipping') is not True:
                 d['verification_level']='checkout_preview';d['status']='conditional'
                 d['delivery_status']='unconfirmed_no_shipping_required'

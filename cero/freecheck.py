@@ -4,6 +4,19 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
 
+def internal_product_reason(url,title='',tags=None,description=''):
+    path=urlparse(url).path.casefold()
+    if isinstance(tags,str):tags=tags.split(',')
+    tags={str(t).casefold().strip() for t in (tags or [])}
+    if 'sca_clone_freegift' in path or 'bogos-gift' in tags or re.search(r'this product is used for the app\s+bogos',str(description or ''),re.I):
+        return 'Ficha interna de regalo promocional BOGOS (sca_clone_freegift/bogos-gift). No es una oferta pública gratuita independiente.'
+    if 'qegiftboxhide' in tags:
+        return 'Ficha interna oculta de una aplicación de cajas regalo (qegiftboxhide), sin producto independiente identificado.'
+    if re.fullmatch(r'tienda\s+(?:on\s*line|virtual)(?:\s+operativa)?',str(title or '').strip(),re.I):
+        return 'Página informativa de la tienda publicada como producto; no identifica un artículo físico gratuito.'
+    return ''
+
+
 def context(soup):
     # No usar recomendaciones, cesta vacía o promociones del pie como descripción.
     nodes=soup.select('.summary,.product-summary,#tab-description,.woocommerce-product-details__short-description,.product-description,#product-description,.product__description,#description,.ec_details_description')
@@ -25,7 +38,7 @@ def inspect(deal,soup):
         deal['_zero_template']=True
         deal.update(status='conditional',free_review='uncertain',conditions='La ficha conserva una descripción de plantilla. Se necesita comprobar que la tienda y el producto están realmente a la venta.')
         deal.pop('_cart_eligible',None)
-    reason=''
+    reason=internal_product_reason(deal.get('url',''),deal.get('title',''),description=text)
     if re.search(r'(?:[úu]nicamente|solo|s[oó]lo|exclusivamente)\s+(?:venta|compra)\s+telef[oó]nica|(?:venta|compra)\s+(?:exclusivamente\s+|solo\s+|[úu]nicamente\s+)?(?:por|v[ií]a)\s+tel[eé]fono',text,re.I):
         reason='Venta únicamente telefónica: el cero de la web no es una oferta gratuita comprable.'
     title=deal.get('title','').strip()

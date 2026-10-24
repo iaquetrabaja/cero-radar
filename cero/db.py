@@ -40,7 +40,8 @@ EXTRA={'status':"TEXT DEFAULT 'unverified'",'availability':"TEXT DEFAULT 'unknow
  'verification_level':"TEXT DEFAULT 'page'",'delivery_status':"TEXT DEFAULT 'unknown'",'next_review':'TEXT',
  'image_status':"TEXT DEFAULT 'pending'",'image_source':"TEXT DEFAULT ''",'gtin':"TEXT DEFAULT ''",'sku':"TEXT DEFAULT ''",'page_status':"TEXT DEFAULT 'unknown'",'subcategory':"TEXT DEFAULT ''",
  'last_verified_at':'TEXT','best_price':'REAL','best_discount':'REAL','ai_score':'REAL','ai_reason':'TEXT','shipping_note':"TEXT DEFAULT ''",
- 'sale_context':"TEXT DEFAULT ''",'free_review':"TEXT DEFAULT 'pending'",'free_review_reason':"TEXT DEFAULT ''"}
+ 'sale_context':"TEXT DEFAULT ''",'free_review':"TEXT DEFAULT 'pending'",'free_review_reason':"TEXT DEFAULT ''",
+ 'review_hold':"TEXT DEFAULT ''"}
 _migrated=set()
 
 
@@ -92,6 +93,17 @@ def upsert(conn,deal):
     valid={'id','source','country','store','title','url','image','category','product_type','price','reference_price',
            'currency','discount_pct','is_free','is_sample','kind','score','verdict','reason','found_at'}|set(EXTRA)
     row.update({k:v for k,v in deal.items() if k in valid})
+    # A reported false positive is independent evidence. A subsequent cart read
+    # or optimistic AI response must not silently clear the unresolved report.
+    if deal.get('_release_review_hold'):
+        row['review_hold']=''
+    elif old and old['review_hold']:
+        row['review_hold']=old['review_hold']
+    if row.get('review_hold') and row.get('status')!='rejected':
+        held={'status':'conditional','free_review':'uncertain','verdict':'revisar','score_source':'review_hold','reason':row['review_hold'],
+              'score':min(row.get('score') or 0,40),'conditions':row['review_hold'],
+              'free_review_reason':row['review_hold']}
+        row.update(held);deal.update(held,review_hold=row['review_hold'])
     from cero.taxonomy import classify
     tags=classify(row.get('title',''))
     if tags['category']!='Otros' or not row.get('category') or row.get('category')=='Otros':row.update(tags)
@@ -159,6 +171,8 @@ def unpack(row):
     try:d['evidence']=json.loads(d.get('evidence') or '[]')
     except (ValueError,TypeError):d['evidence']=[]
     if d.get('price')==0 and d.get('status')=='verified' and d.get('free_review')!='accepted':d['status']='conditional'
+    if d.get('review_hold') and d.get('status')!='rejected':
+        d.update(status='conditional',free_review='uncertain',score=min(d.get('score') or 0,40),score_source='review_hold',reason=d['review_hold'])
     if d.get('status')=='verified' and (not d.get('checked_at') or d['checked_at']<cutoff()):d['status']='stale'
     if d.get('status')=='verified' and d.get('price')!=0 and (d.get('discount_pct') or 0)<80:d['status']='ended'
     if d.get('page_status')=='not_found' and d.get('last_verified_at'):d['status']='removed'
@@ -180,7 +194,7 @@ def query_deals(conn,**f):
             else:
                 clauses.append(key+'=?');params.append(f[key])
                 if key=='status' and f[key]=='verified':
-                    clauses.extend(['checked_at >= ?','(price=0 OR discount_pct>=80)']);params.append(cutoff())
+                    clauses.extend(['checked_at >= ?','(price=0 OR discount_pct>=80)',"COALESCE(review_hold,'')=''"]);params.append(cutoff())
     for key in ('store','q'):
         if f.get(key):
             cols=['store'] if key=='store' else ['title','store','product_type','variant']
@@ -210,7 +224,7 @@ def meta(conn):
     missing_images=conn.execute("SELECT COUNT(*) FROM deals WHERE status!='rejected' AND COALESCE(image_status,'pending')!='verified' AND (price=0 OR discount_pct>=80)").fetchone()[0]
     return {'market':{k:PROFILE[k] for k in ('country','name','currency','language')},'coverage':coverage,'restocks':restocks,'cart_zeros':cart_zeros,'missing_images':missing_images,'countries':[{'value':COUNTRY,'count':len(rows)}],'stores':col('store'),'categories':col('category'),'subcategories':col('subcategory'),'types':col('product_type'),'sources':col('source'),
      'totals':{'deals':len(radar),'available':len(active),'free':sum(d['price']==0 for d in radar),'free_available':sum(d['price']==0 for d in active),'extreme':sum((d['discount_pct'] or 0)>=90 for d in radar),
-     'stores':len({d['store'] for d in active}),'pending':sum(d['status'] in ('unverified','candidate','blocked','stale') for d in rows)},
+     'stores':len({d['store'] for d in active}),'pending':sum(d['status'] in ('unverified','candidate','blocked','stale','conditional') for d in rows)},
      'spent_eur':round(spent_eur(conn),6),'lifetime_spent_eur':conn.execute('SELECT COALESCE(SUM(est_eur),0) FROM usage').fetchone()[0],
      'budget_eur':GEMINI_BUDGET_EUR,'budget_period':'daily','budget_timezone':BUDGET_TIMEZONE,'budget_resets_at':budget_window()[1],
      'reserved_eur':conn.execute('SELECT COALESCE(SUM(eur),0) FROM ai_reservations').fetchone()[0]}
