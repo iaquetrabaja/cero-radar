@@ -25,6 +25,11 @@ def page(price=20,reference=200,availability='InStock',button=True,extra='',offe
 
 
 class ExtractionTests(unittest.TestCase):
+    def test_gift_threshold_without_explicit_minimum_amount_is_not_standalone_free(self):
+        from cero.freecheck import inspect
+        d={'title':'Regalo Misterioso','url':URL,'price':0,'status':'verified','_cart_eligible':True}
+        inspect(d,BeautifulSoup('<main><div class="product-description">Cuando tu carrito alcanza el valor especial, este regalo misterioso llega a tus manos.</div></main>','lxml'))
+        self.assertEqual(d['status'],'rejected');self.assertNotIn('_cart_eligible',d)
     def test_large_storefront_does_not_cut_off_the_product_before_three_megabytes(self):
         from cero import http
         markup='<!--'+'x'*3_100_000+'-->'+page(price=0,reference=12)
@@ -189,6 +194,31 @@ class ShopifyVariantTests(unittest.TestCase):
         with patch('cero.cartcheck.COUNTRY','ES'):
             proof=shopify_shipping_quote(session,'https://tienda.es')
         self.assertEqual(proof['shipping_check'],'no_rates');self.assertNotIn('shipping_quote_eur',proof)
+    def test_pending_carrier_quote_can_finish_asynchronously(self):
+        from cero.cartcheck import shopify_shipping_quote
+        def response(payload,status=200):
+            r=Mock();r.status_code=status;r.json.return_value=payload;return r
+        session=Mock();session.get.side_effect=[response({'shipping_rates':[]}),response(None),response({'shipping_rates':[{'name':'Estándar','price':'4.50','currency':None}]})]
+        session.post.return_value=response(None,202)
+        with patch('cero.cartcheck.COUNTRY','ES'),patch('cero.cartcheck.time.sleep') as sleep:
+            proof=shopify_shipping_quote(session,'https://tienda.es')
+        self.assertEqual(proof['shipping_quote_eur'],4.5);self.assertFalse(proof['destination_confirmed'])
+        self.assertEqual(session.post.call_args.args[0],'https://tienda.es/cart/prepare_shipping_rates.json')
+        self.assertEqual(session.get.call_args.kwargs['params']['shipping_address[zip]'],'28001');sleep.assert_called_once()
+    def test_shipping_throttling_does_not_trigger_alternative_requests(self):
+        from cero.cartcheck import shopify_shipping_quote
+        session=Mock();session.get.return_value.status_code=429
+        with patch('cero.cartcheck.COUNTRY','ES'):
+            proof=shopify_shipping_quote(session,'https://tienda.es')
+        self.assertEqual(proof['shipping_check'],'unavailable');session.post.assert_not_called();session.get.assert_called_once()
+    def test_async_shipping_poll_is_bounded_and_missing_is_not_zero(self):
+        from cero.cartcheck import shopify_shipping_quote
+        session=Mock();session.get.return_value.status_code=200;session.get.return_value.json.return_value=None
+        session.post.return_value.status_code=202
+        with patch('cero.cartcheck.COUNTRY','ES'),patch('cero.cartcheck.time.sleep') as sleep:
+            proof=shopify_shipping_quote(session,'https://tienda.es')
+        self.assertEqual(session.get.call_count,4);self.assertEqual(sleep.call_count,2)
+        self.assertEqual(proof['shipping_check'],'no_rates');self.assertNotIn('shipping_quote_eur',proof)
     def test_stock_overrules_hidden_html_cart_form(self):
         from cero.shopifycheck import apply_variant
         d={'price':0,'status':'verified','availability':'in_stock','image':IMAGE,'_cart_eligible':True}
@@ -318,6 +348,8 @@ class FreeReviewTests(unittest.TestCase):
         self.assertTrue(internal_product_reason(URL,'Gift Box',['qegiftboxhide']))
         self.assertTrue(internal_product_reason(URL,'Crema',['bogos-gift']))
         self.assertTrue(internal_product_reason(URL,'TIENDA ON LINE'))
+        self.assertTrue(internal_product_reason(URL,'Bundle',description='Your Bundle is Unlisted. This product is automatically created. Do Not Delete.'))
+        self.assertFalse(internal_product_reason(URL,'Kit de filtros',description='Bundle de accesorios para aspirador.'))
         self.assertFalse(internal_product_reason(URL,'Crema',['cosmetica'],'La tienda utiliza BOGOS para algunas promociones.'))
     def test_internal_gift_metadata_overrules_cart_eligible_html(self):
         from cero.shopifycheck import apply_variant

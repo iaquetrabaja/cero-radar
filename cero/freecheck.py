@@ -12,6 +12,8 @@ def internal_product_reason(url,title='',tags=None,description=''):
         return 'Ficha interna de regalo promocional BOGOS (sca_clone_freegift/bogos-gift). No es una oferta pública gratuita independiente.'
     if 'qegiftboxhide' in tags:
         return 'Ficha interna oculta de una aplicación de cajas regalo (qegiftboxhide), sin producto independiente identificado.'
+    if re.search(r'your bundle is unlisted',str(description or ''),re.I) and re.search(r'automatically created|do not delete',str(description or ''),re.I):
+        return 'Ficha interna de una aplicación de lotes; no identifica un artículo físico gratuito independiente.'
     if re.fullmatch(r'tienda\s+(?:on\s*line|virtual)(?:\s+operativa)?',str(title or '').strip(),re.I):
         return 'Página informativa de la tienda publicada como producto; no identifica un artículo físico gratuito.'
     if re.fullmatch(r'(?:(?:primera|segunda|tercera)\s+)?devoluci[oó]n\s+(?:de\s+)?(?:pedido|producto)',str(title or '').strip(),re.I):
@@ -41,6 +43,8 @@ def inspect(deal,soup):
         deal.update(status='conditional',free_review='uncertain',conditions='La ficha conserva una descripción de plantilla. Se necesita comprobar que la tienda y el producto están realmente a la venta.')
         deal.pop('_cart_eligible',None)
     reason=internal_product_reason(deal.get('url',''),deal.get('title',''),description=text)
+    if re.search(r'regalo|gift',deal.get('title',''),re.I) and re.search(r'(?:cuando|si)\s+(?:tu|el)\s+(?:carrito|pedido)\s+(?:alcanza|supera).{0,80}(?:valor|importe|[€$]|euros)',text,re.I):
+        reason='Regalo sujeto a alcanzar un importe en el carrito. Requiere otra compra y no es un producto gratis independiente.'
     if re.search(r'(?:[úu]nicamente|solo|s[oó]lo|exclusivamente)\s+(?:venta|compra)\s+telef[oó]nica|(?:venta|compra)\s+(?:exclusivamente\s+|solo\s+|[úu]nicamente\s+)?(?:por|v[ií]a)\s+tel[eé]fono',text,re.I):
         reason='Venta únicamente telefónica: el cero de la web no es una oferta gratuita comprable.'
     title=deal.get('title','').strip()

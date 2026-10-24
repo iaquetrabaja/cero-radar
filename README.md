@@ -116,6 +116,8 @@ Los adaptadores nuevos devuelven candidatos que pasan por `hunter.check_url`, `v
 
 ## Casos observados
 
+Consulta los [ejemplos comprobados y sus portes](docs/verified-examples.md): cuatro accesorios de Dreame España, gafas de Marronynegro y una bolsa física Dr.Grandel. Incluyen variantes exactas, fecha y límites de la comprobación.
+
 El 24 de octubre de 2026 mantuvieron precio cero, por separado y en cesta anónima, una **turmalina en Lozano Gemólogos**, una **bolsa física Dr.Grandel en être belle** y **Frutas sorpresa unidad en ComeFruta**. En ComeFruta se llegó a la pantalla previa al pago con una unidad a 0 EUR, sin otro artículo ni suscripción, y 5,84 EUR de envío para un código postal público de prueba de Madrid; no se facilitó dirección ni se tramitó pedido. La primera cesta mostraba 6,05 € de gastos sin seleccionar destino. Son observaciones fechadas, no ofertas permanentes ni pedidos entregados. Se descartaron falsos positivos: una variante Origins no comprable y compra oculta en Cuatro Rayas.
 
 ## Créditos

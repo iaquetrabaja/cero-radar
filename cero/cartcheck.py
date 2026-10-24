@@ -1,6 +1,7 @@
 """Prueba de precio cero en una cesta nueva sin cuentas, direcciones ni pedidos."""
 import json
 import re
+import time
 from bs4 import BeautifulSoup
 from cero.money import parse_amount
 from urllib.parse import urlparse,urljoin,parse_qs
@@ -27,14 +28,31 @@ def shopify_shipping_quote(session,root):
     # own validated destination instead of inheriting a Spanish shipping quote.
     if COUNTRY!='ES':return {}
     try:
-        r=session.get(root+'/cart/shipping_rates.json',params={
+        destination={
             'shipping_address[country]':'Spain','shipping_address[province]':'Madrid',
-            'shipping_address[zip]':'28001'},timeout=12,allow_redirects=False)
+            'shipping_address[zip]':'28001'}
+        r=session.get(root+'/cart/shipping_rates.json',params=destination,timeout=12,allow_redirects=False)
         if r.status_code!=200:return {'shipping_check':'unavailable'}
-        rates=r.json().get('shipping_rates',[]);valid=[]
+        payload=r.json()
+        rates=payload.get('shipping_rates',[]) if isinstance(payload,dict) else []
+        # Shopify can return no rates while its carrier calculation is pending.
+        # Prepare and poll the documented async endpoint, with a strict bound.
+        # Never retry HTTP errors or treat a missing quote as free shipping.
+        if not rates:
+            prepared=session.post(root+'/cart/prepare_shipping_rates.json',params=destination,timeout=12,allow_redirects=False)
+            if prepared.status_code in (200,202):
+                for attempt in range(3):
+                    ready=session.get(root+'/cart/async_shipping_rates.json',params=destination,timeout=12,allow_redirects=False)
+                    if ready.status_code!=200:return {'shipping_check':'unavailable'}
+                    payload=ready.json()
+                    if isinstance(payload,dict):
+                        rates=payload.get('shipping_rates',[])
+                        break
+                    if attempt<2:time.sleep(.6)
+        valid=[]
         for rate in rates:
             amount=parse_amount(str(rate.get('price','')))
-            if amount is not None and rate.get('currency',CURRENCY)==CURRENCY:
+            if amount is not None and amount>=0 and (rate.get('currency') or CURRENCY)==CURRENCY:
                 valid.append({'name':rate.get('name',''),'price':amount})
         if not valid:return {'shipping_check':'no_rates'}
         best=min(valid,key=lambda x:x['price'])

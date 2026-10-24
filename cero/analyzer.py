@@ -68,7 +68,7 @@ def _grounded_exclusion(d,item):
       'quote_only':r'presupuesto|cotizaci[oó]n|consultar precio|precio a consultar',
       'test_product':r'prueba\d|dummy|producto de prueba|producto de test',
       'sample':r'muestra|sample|trial|probador',
-      'conditional_purchase':r'al comprar|con (?:cada |tu |la |el )?(?:pedido|compra)|por (?:la )?compra|compras? m[ií]nimas?|pedido m[ií]nimo|compra de|pedido de|adquiriendo',
+      'conditional_purchase':r'al comprar|con (?:cada |tu |la |el )?(?:pedido|compra)|por (?:la )?compra|compras? m[ií]nimas?|pedido m[ií]nimo|compra de|pedido de|adquiriendo|(?:carrito|pedido).{0,35}(?:alcanza|supera)',
       'service':r'servicio|presupuesto|personaliza|descarg|donaci[oó]n',
       'placeholder':r'precio orientativo|precio no (?:real|definitivo)|sin valor comercial|marcador|placeholder|hidden product'}
     return len(norm(quote))>=6 and norm(quote) in corpus and kind in patterns and bool(re.search(patterns[kind],quote,re.I))
